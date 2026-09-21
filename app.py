@@ -136,15 +136,35 @@ st.markdown("""
     .data-summary-card .lbl { font-size: 0.7rem; color: #a8b2d1; text-transform: uppercase;
         letter-spacing: 1px; margin-top: 0.2rem; }
 
-    /* Responsive KPI for smaller screens */
-    @media (max-width: 768px) {
-        .kpi-row { grid-template-columns: repeat(3, 1fr); }
-        .hero h1 { font-size: 1.3rem; }
-        .hero img { height: 50px; }
-    }
-
     /* Logo styling */
     .hero img { height: 80px; border-radius: 12px; border: 2px solid rgba(233,69,96,0.4); }
+
+    /* ── Mobile responsive ─────────────────────────────────── */
+    @media (max-width: 768px) {
+        .hero { flex-wrap: wrap; padding: 1rem; gap: 0.8rem; justify-content: center; text-align: center; }
+        .hero img { height: 50px; }
+        .hero h1 { font-size: 1.3rem; }
+        .hero .subtitle { font-size: 0.75rem; }
+        .hero .date-badge { margin-left: 0; margin-top: 0.3rem; }
+        .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+        .kpi-value { font-size: 1.3rem; }
+        .kpi-label { font-size: 0.6rem; }
+        .filter-strip { padding: 0.4rem 0.6rem 0.1rem 0.6rem; }
+        .stTabs [data-baseweb="tab-list"] { flex-wrap: wrap; gap: 0.2rem; }
+        .stTabs [data-baseweb="tab"] { padding: 0.35rem 0.8rem; font-size: 0.72rem; }
+        .upload-preview .stat-grid { grid-template-columns: repeat(2,1fr); }
+        .data-summary-grid { grid-template-columns: repeat(2,1fr); }
+        .rec-keep, .rec-watch, .rec-drop { font-size: 0.85rem; padding: 0.5rem 0.8rem; }
+    }
+    @media (max-width: 480px) {
+        .hero { padding: 0.8rem 0.6rem; gap: 0.5rem; }
+        .hero h1 { font-size: 1.1rem; }
+        .hero .subtitle { font-size: 0.68rem; }
+        .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+        .kpi-card { padding: 0.7rem 0.8rem; }
+        .kpi-value { font-size: 1.1rem; }
+        .stTabs [data-baseweb="tab"] { padding: 0.3rem 0.5rem; font-size: 0.65rem; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -320,13 +340,11 @@ today_str = datetime.now().strftime("%B %d, %Y")
 st.markdown(f"""
 <div class="hero">
     {logo_html}
-    <div>
+    <div style="flex:1;min-width:0;">
         <h1>Kalachandji's Campus Sales</h1>
-        <p class="subtitle">University of Texas at Dallas &mdash; Real-time menu decisions, peak analysis & outlet performance</p>
+        <p class="subtitle">University of Texas at Dallas &mdash; Real-time menu decisions, peak analysis &amp; outlet performance</p>
     </div>
-    <div style="margin-left:auto;display:flex;align-items:center;gap:0.8rem;">
-        <div class="date-badge">{today_str}</div>
-    </div>
+    <div class="date-badge">{today_str}</div>
 </div>
 """, unsafe_allow_html=True)
 
