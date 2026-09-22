@@ -10,8 +10,17 @@ import streamlit as st
 from datetime import datetime
 
 # ── Supabase connection ──────────────────────────────────────────────────────
-SUPABASE_URL = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY", "")
+def _read_secret(key):
+    val = os.environ.get(key, "")
+    if not val:
+        try:
+            val = st.secrets[key]
+        except (KeyError, FileNotFoundError):
+            val = ""
+    return val
+
+SUPABASE_URL = _read_secret("SUPABASE_URL")
+SUPABASE_KEY = _read_secret("SUPABASE_KEY")
 
 _sb = None
 
