@@ -39,6 +39,14 @@ st.markdown("""
     header[data-testid="stHeader"] { display: none; }
     #MainMenu, footer { visibility: hidden; }
 
+    /* Warm themed background */
+    .stApp, [data-testid="stAppViewContainer"] {
+        background: linear-gradient(160deg, #fdf6f0 0%, #f0e9f5 30%, #e8f0fe 60%, #fdf6f0 100%) !important;
+    }
+    .main [data-testid="stVerticalBlockBorderWrapper"] {
+        background: transparent !important;
+    }
+
     /* Header bar */
     .hero {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
@@ -57,7 +65,8 @@ st.markdown("""
     /* KPI row */
     .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.8rem;
                margin: 0 0 0.6rem 0; }
-    .kpi-card { background: #fff; border: 1px solid #eef0f6; border-radius: 1rem;
+    .kpi-card { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px);
+        border: 1px solid rgba(238,240,246,0.8); border-radius: 1rem;
         padding: 1rem 1.2rem; position: relative; overflow: hidden;
         transition: all 0.25s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
     .kpi-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
@@ -68,14 +77,16 @@ st.markdown("""
     .kpi-sub { font-size: 0.72rem; color: #a0a8c0; margin-top: 0.2rem; }
 
     /* Filter bar */
-    .filter-strip { background: #f8f9ff; border: 1px solid #eef0f6; border-radius: 0.8rem;
+    .filter-strip { background: rgba(248,249,255,0.8); backdrop-filter: blur(10px);
+        border: 1px solid rgba(238,240,246,0.6); border-radius: 0.8rem;
         padding: 0.6rem 1.2rem 0.2rem 1.2rem; margin-bottom: 0.6rem; }
     .filter-label { font-size: 0.7rem; color: #8892b0; text-transform: uppercase;
         letter-spacing: 1.2px; font-weight: 700; margin-bottom: 0.15rem; }
 
     /* Tabs */
-    .stTabs [data-baseweb="tab-list"] { gap: 0.3rem; background: linear-gradient(135deg,#f8f9ff,#eef0f6);
-        padding: 0.35rem 0.5rem; border-radius: 0.8rem; border: 1px solid #e8ecf4; }
+    .stTabs [data-baseweb="tab-list"] { gap: 0.3rem; background: rgba(248,249,255,0.7);
+        backdrop-filter: blur(10px); padding: 0.35rem 0.5rem; border-radius: 0.8rem;
+        border: 1px solid rgba(232,236,244,0.6); }
     .stTabs [data-baseweb="tab"] { border-radius: 0.6rem; padding: 0.5rem 1.5rem;
         font-weight: 600; font-size: 0.85rem; }
     .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #e94560, #ff6b6b) !important;
