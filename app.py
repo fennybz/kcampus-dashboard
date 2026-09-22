@@ -381,12 +381,12 @@ if has_data:
     with fc1:
         st.markdown('<div class="filter-label">Outlet</div>', unsafe_allow_html=True)
         outlets = sorted(primary["outlet"].dropna().unique())
-        sel_outlets = st.multiselect("Outlet", outlets, default=outlets,
+        sel_outlets = st.multiselect("Outlet", outlets, default=[],
                                      placeholder="All Outlets", label_visibility="collapsed")
     with fc2:
         st.markdown('<div class="filter-label">Menu Category</div>', unsafe_allow_html=True)
         categories = sorted(primary["menu_category"].dropna().unique())
-        sel_cats = st.multiselect("Category", categories, default=categories,
+        sel_cats = st.multiselect("Category", categories, default=[],
                                   placeholder="All Categories", label_visibility="collapsed")
     with fc3:
         st.markdown('<div class="filter-label">Date Range</div>', unsafe_allow_html=True)
@@ -399,7 +399,7 @@ if has_data:
     with fc4:
         st.markdown('<div class="filter-label">Product</div>', unsafe_allow_html=True)
         products = sorted(primary["product"].dropna().unique())
-        sel_products = st.multiselect("Product", products, default=products,
+        sel_products = st.multiselect("Product", products, default=[],
                                       placeholder="All Products", label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
 
