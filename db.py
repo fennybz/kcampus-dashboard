@@ -216,6 +216,7 @@ def parse_campus_excel(uploaded_file, filename):
 
         dt = pd.Timestamp(date_val)
         location = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
+        category = str(row.iloc[4]).strip() if len(row) > 4 and pd.notna(row.iloc[4]) else ""
         item = str(row.iloc[5]).strip() if pd.notna(row.iloc[5]) else ""
         qty = float(row.iloc[8]) if pd.notna(row.iloc[8]) else 0
         unit_price = float(row.iloc[10]) if pd.notna(row.iloc[10]) else 0
@@ -230,7 +231,7 @@ def parse_campus_excel(uploaded_file, filename):
             "sales_date": dt.strftime("%Y-%m-%d"),
             "day_of_week": dt.strftime("%A"),
             "outlet": location,
-            "menu_category": "",
+            "menu_category": category,
             "product": item,
             "row_type": "Primary",
             "raw_quantity": qty,

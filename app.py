@@ -396,7 +396,7 @@ if has_data:
                                      placeholder="All Outlets", label_visibility="collapsed")
     with fc2:
         st.markdown('<div class="filter-label">Menu Category</div>', unsafe_allow_html=True)
-        categories = sorted(primary["menu_category"].dropna().unique())
+        categories = sorted([c for c in primary["menu_category"].dropna().unique() if c.strip()])
         sel_cats = st.multiselect("Category", categories, default=[],
                                   placeholder="All Categories", label_visibility="collapsed")
     with fc3:
