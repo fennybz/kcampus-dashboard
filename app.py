@@ -468,7 +468,7 @@ with tab5:
 
     if not active_h.empty:
         total_rows = int(active_h["row_count"].sum())
-        total_net = active_h["net_sales"].sum()
+        total_net = f["net_sales"].sum() if has_data else 0.0
         total_batches = len(active_h)
         coverage = f'{active_h["date_min"].min()} to {active_h["date_max"].max()}'
     else:
