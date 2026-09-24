@@ -294,10 +294,21 @@ if dark:
         div[data-baseweb="select"] > div,
         div[data-baseweb="select"] div[class],
         .stSelectbox div[data-baseweb="select"],
-        .stSelectbox [data-baseweb="select"] > div { background-color: #21262d !important; border-color: #30363d !important; color: #e6edf3 !important; }
+        .stSelectbox [data-baseweb="select"] > div,
+        .stMultiSelect div[data-baseweb="select"],
+        .stMultiSelect [data-baseweb="select"] > div { background-color: #21262d !important; border-color: #30363d !important; color: #e6edf3 !important; }
         .stSelectbox div[data-baseweb="select"] span,
         .stSelectbox div[data-baseweb="select"] div,
+        .stMultiSelect div[data-baseweb="select"] span,
+        .stMultiSelect div[data-baseweb="select"] div,
         div[data-baseweb="select"] svg { color: #e6edf3 !important; fill: #e6edf3 !important; }
+        /* Placeholder text in dropdowns */
+        div[data-baseweb="select"] [data-baseweb="tag"] + div,
+        div[data-baseweb="select"] input::placeholder,
+        .stMultiSelect input::placeholder,
+        .stSelectbox input::placeholder { color: #8b949e !important; opacity: 1 !important; }
+        div[data-baseweb="select"] .st-emotion-cache-1aehpvj,
+        div[data-baseweb="select"] [class*="placeholder"] { color: #8b949e !important; }
         /* Popover / dropdown list — root level overrides */
         [data-baseweb="popover"], [data-baseweb="popover"] > div,
         [data-baseweb="menu"], [role="listbox"],
@@ -315,12 +326,22 @@ if dark:
         /* Multi-select tags */
         span[data-baseweb="tag"] { background-color: #30363d !important; color: #e6edf3 !important; }
         span[data-baseweb="tag"] span { color: #e6edf3 !important; }
-        /* Text inputs */
+        /* Text inputs & date input */
         div[data-baseweb="input"], div[data-baseweb="input"] input,
-        .stDateInput input { color: #e6edf3 !important; background-color: #21262d !important; border-color: #30363d !important; }
+        .stDateInput input,
+        .stDateInput > div > div, .stDateInput > div > div > div,
+        .stDateInput [data-baseweb="input"] { color: #e6edf3 !important; background-color: #21262d !important; border-color: #30363d !important; }
         /* Calendar */
-        div[data-baseweb="calendar"] { background-color: #161b22 !important; color: #e6edf3 !important; }
-        div[data-baseweb="calendar"] * { color: #e6edf3 !important; }
+        div[data-baseweb="calendar"], div[data-baseweb="calendar"] *,
+        [data-baseweb="datepicker"], [data-baseweb="datepicker"] * { background-color: #161b22 !important; color: #e6edf3 !important; }
+        /* ALL buttons dark */
+        .stButton > button, button[kind="secondary"], button[kind="primary"] {
+            background-color: #21262d !important;
+            border-color: #30363d !important; color: #e6edf3 !important; }
+        .stButton > button:hover { background-color: #30363d !important; }
+        /* Radio buttons (Revenue/Units, Daily/Weekly) */
+        .stRadio > div { background-color: transparent !important; }
+        .stRadio label, .stRadio label span { color: #e6edf3 !important; }
 
         /* Plotly chart text — force via JS class overrides */
         .js-plotly-plot .plotly .gtitle { fill: #e6edf3 !important; }
