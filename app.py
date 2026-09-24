@@ -385,10 +385,30 @@ if has_data:
         if c in df_all.columns:
             df_all[c] = pd.to_numeric(df_all[c], errors="coerce").fillna(0)
     primary = df_all[df_all["row_type"] == "Primary"].copy()
+    extras_all = df_all[df_all["row_type"] == "Modifier"].copy()
+
+    # ── Semester / Week helpers ─────────────────────────────────────────────
+    def get_semester(dt):
+        m = dt.month
+        if 8 <= m <= 12: return "Fall"
+        if 1 <= m <= 5: return "Spring"
+        return "Summer"
+
+    primary["semester"] = primary["sales_date"].apply(get_semester)
 
     # ── FILTER BAR ───────────────────────────────────────────────────────────
     st.markdown('<div class="filter-strip">', unsafe_allow_html=True)
-    fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 2])
+    fc0, fc1, fc2, fc3, fc4, fc5 = st.columns([2.5, 2, 2, 1.5, 1.5, 2])
+    with fc0:
+        st.markdown('<div class="filter-label">Date Range</div>', unsafe_allow_html=True)
+        _dmin = primary["sales_date"].min().date()
+        _dmax = primary["sales_date"].max().date()
+        sel_dates = st.date_input("Date Range", value=(_dmin, _dmax), min_value=_dmin,
+                                  max_value=_dmax, label_visibility="collapsed")
+        if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
+            _date_start, _date_end = sel_dates
+        else:
+            _date_start, _date_end = _dmin, _dmax
     with fc1:
         st.markdown('<div class="filter-label">Outlet</div>', unsafe_allow_html=True)
         outlets = sorted(primary["outlet"].dropna().unique())
@@ -400,26 +420,42 @@ if has_data:
         sel_cats = st.multiselect("Category", categories, default=[],
                                   placeholder="All Categories", label_visibility="collapsed")
     with fc3:
-        st.markdown('<div class="filter-label">Date Range</div>', unsafe_allow_html=True)
-        min_d = primary["sales_date"].min().date()
-        max_d = primary["sales_date"].max().date()
-        dr = st.date_input("Dates", value=(min_d, max_d), min_value=min_d,
-                           max_value=max_d, label_visibility="collapsed")
-        sd = dr[0] if len(dr) >= 1 else min_d
-        ed = dr[1] if len(dr) >= 2 else max_d
+        st.markdown('<div class="filter-label">Semester</div>', unsafe_allow_html=True)
+        semesters = sorted(primary["semester"].unique(), key=lambda x: ["Spring","Summer","Fall"].index(x) if x in ["Spring","Summer","Fall"] else 0)
+        sel_sem = st.multiselect("Semester", semesters, default=[],
+                                 placeholder="All", label_visibility="collapsed")
     with fc4:
+        st.markdown('<div class="filter-label">Recent</div>', unsafe_allow_html=True)
+        _recent_opts = ["All Time", "Last 1 Week", "Last 2 Weeks", "Last 4 Weeks", "Last 8 Weeks"]
+        sel_recent = st.selectbox("Recent", _recent_opts, index=0, label_visibility="collapsed")
+    with fc5:
         st.markdown('<div class="filter-label">Product</div>', unsafe_allow_html=True)
         products = sorted(primary["product"].dropna().unique())
         sel_products = st.multiselect("Product", products, default=[],
                                       placeholder="All Products", label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # Compute recent weeks cutoff
+    if sel_recent != "All Time":
+        _n_weeks = int(sel_recent.split()[1])
+        _recent_cutoff = _dmax - pd.Timedelta(weeks=_n_weeks)
+        _date_start = max(_date_start, _recent_cutoff)
+
     # Apply filters
     mask = (primary["outlet"].isin(sel_outlets if sel_outlets else outlets)
             & primary["menu_category"].isin(sel_cats if sel_cats else categories)
             & primary["product"].isin(sel_products if sel_products else products)
-            & (primary["sales_date"].dt.date >= sd) & (primary["sales_date"].dt.date <= ed))
+            & primary["semester"].isin(sel_sem if sel_sem else semesters)
+            & (primary["sales_date"].dt.date >= _date_start)
+            & (primary["sales_date"].dt.date <= _date_end))
     f = primary[mask].copy()
+    # Filtered extras (modifiers matching the date range)
+    if not extras_all.empty:
+        f_extras = extras_all[
+            (extras_all["sales_date"].dt.date >= _date_start) &
+            (extras_all["sales_date"].dt.date <= _date_end)].copy()
+    else:
+        f_extras = pd.DataFrame()
 
     if f.empty:
         st.warning("No data for current filters.")
@@ -462,157 +498,174 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
 # TAB 5: DATA MANAGEMENT
 # ══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    # Data summary at top
-    history = get_upload_history()
-    active_h = history[history["status"] == "ACTIVE"] if not history.empty else pd.DataFrame()
+    # Access control for entire Data Management tab
+    UPLOAD_PIN = os.environ.get("UPLOAD_PIN", "") or "kalachandji2026"
+    if "upload_unlocked" not in st.session_state:
+        st.session_state.upload_unlocked = False
 
-    if not active_h.empty:
-        total_rows = int(active_h["row_count"].sum())
-        total_net = f["net_sales"].sum() if has_data else 0.0
-        total_batches = len(active_h)
-        coverage = f'{active_h["date_min"].min()} to {active_h["date_max"].max()}'
-    else:
-        total_rows, total_net, total_batches, coverage = 0, 0.0, 0, "No data"
-
-    st.markdown(f'''
-    <div class="data-summary-grid">
-        <div class="data-summary-card"><div class="val">{total_batches}</div><div class="lbl">Active Batches</div></div>
-        <div class="data-summary-card"><div class="val">{total_rows:,}</div><div class="lbl">Total Rows</div></div>
-        <div class="data-summary-card"><div class="val">${total_net:,.0f}</div><div class="lbl">Total Net Sales</div></div>
-        <div class="data-summary-card"><div class="val">{coverage}</div><div class="lbl">Date Coverage</div></div>
-    </div>
-    ''', unsafe_allow_html=True)
-
-    # Two-column layout: Upload on left, History on right
-    upload_col, history_col = st.columns([1, 1], gap="large")
-
-    with upload_col:
-        st.markdown('<p class="sec-title">Upload Weekly Report</p>', unsafe_allow_html=True)
-        st.markdown("Drop the weekly campus Excel file below. Data is validated and appended to your running history.")
-
-        uploaded = st.file_uploader("Upload Excel", type=["xlsx", "xls"], key="uploader",
-                                    label_visibility="collapsed")
-
-        if uploaded:
-            with st.spinner("Parsing..."):
-                parsed = parse_campus_excel(uploaded, uploaded.name)
-
-            if parsed.empty:
-                st.error("Could not parse any data rows. Check file format.")
+    if not st.session_state.upload_unlocked:
+        st.markdown("### Restricted Access")
+        st.markdown("Data Management is restricted to authorized team members.")
+        pin_input = st.text_input("Enter PIN to access", type="password",
+                                  placeholder="Enter PIN", key="pin_input")
+        if pin_input:
+            if pin_input == UPLOAD_PIN:
+                st.session_state.upload_unlocked = True
+                st.rerun()
             else:
-                date_min = parsed["sales_date"].min()
-                date_max = parsed["sales_date"].max()
-                net_total = parsed["net_sales"].sum()
-                units_total = int(parsed.loc[parsed["row_type"] == "Primary", "primary_units"].sum())
-                n_items = parsed["product"].nunique()
-                n_outlets = parsed["outlet"].nunique()
+                st.error("Incorrect PIN.")
 
-                st.markdown(f'''
-                <div class="upload-preview">
-                    <div class="header">
-                        <span class="icon">&#128202;</span>
-                        <span style="font-weight:700;font-size:1rem;">{uploaded.name}</span>
-                    </div>
-                    <div class="stat-grid">
-                        <div class="stat"><div class="num">{date_min}</div><div class="lbl">Start Date</div></div>
-                        <div class="stat"><div class="num">{date_max}</div><div class="lbl">End Date</div></div>
-                        <div class="stat"><div class="num">{len(parsed):,}</div><div class="lbl">Rows</div></div>
-                        <div class="stat"><div class="num">{units_total:,}</div><div class="lbl">Units</div></div>
-                        <div class="stat"><div class="num">${net_total:,.2f}</div><div class="lbl">Net Sales</div></div>
-                        <div class="stat"><div class="num">{n_items}</div><div class="lbl">Products</div></div>
-                        <div class="stat"><div class="num">{n_outlets}</div><div class="lbl">Outlets</div></div>
-                        <div class="stat"><div class="num">${net_total/max(units_total,1):,.2f}</div><div class="lbl">Avg / Unit</div></div>
-                    </div>
-                </div>
-                ''', unsafe_allow_html=True)
+    if st.session_state.upload_unlocked:
+        # Data summary at top
+        history = get_upload_history()
+        active_h = history[history["status"] == "ACTIVE"] if not history.empty else pd.DataFrame()
 
-                dup = check_duplicate(date_min, date_max, uploaded.name)
-                if dup:
+        if not active_h.empty:
+            total_rows = int(active_h["row_count"].sum())
+            total_net = f["net_sales"].sum() if has_data else 0.0
+            total_batches = len(active_h)
+            coverage = f'{active_h["date_min"].min()} to {active_h["date_max"].max()}'
+        else:
+            total_rows, total_net, total_batches, coverage = 0, 0.0, 0, "No data"
+
+        st.markdown(f'''
+        <div class="data-summary-grid">
+            <div class="data-summary-card"><div class="val">{total_batches}</div><div class="lbl">Active Batches</div></div>
+            <div class="data-summary-card"><div class="val">{total_rows:,}</div><div class="lbl">Total Rows</div></div>
+            <div class="data-summary-card"><div class="val">${total_net:,.0f}</div><div class="lbl">Total Net Sales</div></div>
+            <div class="data-summary-card"><div class="val">{coverage}</div><div class="lbl">Date Coverage</div></div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+        # Two-column layout: Upload on left, History on right
+        upload_col, history_col = st.columns([1, 1], gap="large")
+
+        with upload_col:
+            st.markdown('<p class="sec-title">Upload Weekly Report</p>', unsafe_allow_html=True)
+            st.markdown("Drop the weekly campus Excel file below.")
+            uploaded = st.file_uploader("Upload Excel", type=["xlsx", "xls"], key="uploader",
+                                        label_visibility="collapsed")
+
+            if uploaded:
+                with st.spinner("Parsing..."):
+                    parsed = parse_campus_excel(uploaded, uploaded.name)
+
+                if parsed.empty:
+                    st.error("Could not parse any data rows. Check file format.")
+                else:
+                    date_min = parsed["sales_date"].min()
+                    date_max = parsed["sales_date"].max()
+                    net_total = parsed["net_sales"].sum()
+                    units_total = int(parsed.loc[parsed["row_type"] == "Primary", "primary_units"].sum())
+                    n_items = parsed["product"].nunique()
+                    n_outlets = parsed["outlet"].nunique()
+
                     st.markdown(f'''
-                    <div class="upload-warn">
-                        <b>Duplicate detected:</b> {date_min} to {date_max} already uploaded on {dup[2]}
-                        (Batch #{dup[0]}: {dup[1]}). Check the box below to force a second upload.
+                    <div class="upload-preview">
+                        <div class="header">
+                            <span class="icon">&#128202;</span>
+                            <span style="font-weight:700;font-size:1rem;">{uploaded.name}</span>
+                        </div>
+                        <div class="stat-grid">
+                            <div class="stat"><div class="num">{date_min}</div><div class="lbl">Start Date</div></div>
+                            <div class="stat"><div class="num">{date_max}</div><div class="lbl">End Date</div></div>
+                            <div class="stat"><div class="num">{len(parsed):,}</div><div class="lbl">Rows</div></div>
+                            <div class="stat"><div class="num">{units_total:,}</div><div class="lbl">Units</div></div>
+                            <div class="stat"><div class="num">${net_total:,.2f}</div><div class="lbl">Net Sales</div></div>
+                            <div class="stat"><div class="num">{n_items}</div><div class="lbl">Products</div></div>
+                            <div class="stat"><div class="num">{n_outlets}</div><div class="lbl">Outlets</div></div>
+                            <div class="stat"><div class="num">${net_total/max(units_total,1):,.2f}</div><div class="lbl">Avg / Unit</div></div>
+                        </div>
                     </div>
                     ''', unsafe_allow_html=True)
-                    force = st.checkbox("Force upload (allow duplicate)")
-                    can_upload = force
-                else:
-                    can_upload = True
 
-                if can_upload:
-                    if st.button("Confirm Upload", type="primary", use_container_width=True):
-                        uid = insert_upload(uploaded.name, parsed)
-                        st.success(f"Batch #{uid} uploaded — {len(parsed)} rows added.")
+                    dup = check_duplicate(date_min, date_max, uploaded.name)
+                    if dup:
+                        st.markdown(f'''
+                        <div class="upload-warn">
+                            <b>Duplicate detected:</b> {date_min} to {date_max} already uploaded on {dup[2]}
+                            (Batch #{dup[0]}: {dup[1]}). Check the box below to force a second upload.
+                        </div>
+                        ''', unsafe_allow_html=True)
+                        force = st.checkbox("Force upload (allow duplicate)")
+                        can_upload = force
+                    else:
+                        can_upload = True
+
+                    if can_upload:
+                        if st.button("Confirm Upload", type="primary", use_container_width=True):
+                            uid = insert_upload(uploaded.name, parsed)
+                            st.success(f"Batch #{uid} uploaded — {len(parsed)} rows added.")
+                            st.cache_data.clear()
+                            st.rerun()
+
+        with history_col:
+            st.markdown('<p class="sec-title">Upload History</p>', unsafe_allow_html=True)
+
+            if history.empty:
+                st.info("No uploads yet. Use the panel on the left to upload your first weekly report.")
+            else:
+                # Filter controls for history
+                hf1, hf2 = st.columns(2)
+                with hf1:
+                    status_filter = st.selectbox("Status", ["All", "Active", "Removed"],
+                                                 label_visibility="collapsed")
+                with hf2:
+                    sort_by = st.selectbox("Sort", ["Newest First", "Oldest First", "Highest Sales",
+                                                    "Most Rows"], label_visibility="collapsed")
+
+                filtered_h = history.copy()
+                if status_filter == "Active":
+                    filtered_h = filtered_h[filtered_h["status"] == "ACTIVE"]
+                elif status_filter == "Removed":
+                    filtered_h = filtered_h[filtered_h["status"] == "INACTIVE"]
+
+                if sort_by == "Newest First":
+                    filtered_h = filtered_h.sort_values("uploaded_at", ascending=False)
+                elif sort_by == "Oldest First":
+                    filtered_h = filtered_h.sort_values("uploaded_at", ascending=True)
+                elif sort_by == "Highest Sales":
+                    filtered_h = filtered_h.sort_values("net_sales", ascending=False)
+                else:
+                    filtered_h = filtered_h.sort_values("row_count", ascending=False)
+
+                for _, h in filtered_h.iterrows():
+                    is_active = h["status"] == "ACTIVE"
+                    card_cls = "active" if is_active else "inactive"
+                    badge_cls = "badge-active" if is_active else "badge-removed"
+                    badge_text = "ACTIVE" if is_active else "REMOVED"
+                    st.markdown(f'''
+                    <div class="batch-card {card_cls}">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span class="title">Batch #{h['id']} &mdash; {h['filename']}</span>
+                            <span class="badge {badge_cls}">{badge_text}</span>
+                        </div>
+                        <div class="meta">
+                            <b>{h['date_min']}</b> to <b>{h['date_max']}</b> &nbsp;&bull;&nbsp;
+                            {h['row_count']:,} rows &nbsp;&bull;&nbsp;
+                            {h['total_units']:,} units &nbsp;&bull;&nbsp;
+                            <b>${h['net_sales']:,.2f}</b> net<br>
+                            Uploaded {h['uploaded_at']}
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+
+                # Batch removal
+                st.markdown("")
+                active_batches = history[history["status"] == "ACTIVE"]
+                if len(active_batches) > 1:
+                    st.markdown('<p class="sec-title">Remove a Batch</p>', unsafe_allow_html=True)
+                    batch_opts = [f"#{r['id']} — {r['filename']} ({r['date_min']} to {r['date_max']})"
+                                  for _, r in active_batches.iterrows()]
+                    sel_batch = st.selectbox("Select batch", batch_opts, label_visibility="collapsed")
+                    batch_id = int(sel_batch.split("#")[1].split(" ")[0])
+                    if st.button("Remove Batch", type="secondary"):
+                        deactivate_upload(batch_id)
+                        st.success(f"Batch #{batch_id} removed.")
                         st.cache_data.clear()
                         st.rerun()
-
-    with history_col:
-        st.markdown('<p class="sec-title">Upload History</p>', unsafe_allow_html=True)
-
-        if history.empty:
-            st.info("No uploads yet. Use the panel on the left to upload your first weekly report.")
-        else:
-            # Filter controls for history
-            hf1, hf2 = st.columns(2)
-            with hf1:
-                status_filter = st.selectbox("Status", ["All", "Active", "Removed"],
-                                             label_visibility="collapsed")
-            with hf2:
-                sort_by = st.selectbox("Sort", ["Newest First", "Oldest First", "Highest Sales",
-                                                "Most Rows"], label_visibility="collapsed")
-
-            filtered_h = history.copy()
-            if status_filter == "Active":
-                filtered_h = filtered_h[filtered_h["status"] == "ACTIVE"]
-            elif status_filter == "Removed":
-                filtered_h = filtered_h[filtered_h["status"] == "INACTIVE"]
-
-            if sort_by == "Newest First":
-                filtered_h = filtered_h.sort_values("uploaded_at", ascending=False)
-            elif sort_by == "Oldest First":
-                filtered_h = filtered_h.sort_values("uploaded_at", ascending=True)
-            elif sort_by == "Highest Sales":
-                filtered_h = filtered_h.sort_values("net_sales", ascending=False)
-            else:
-                filtered_h = filtered_h.sort_values("row_count", ascending=False)
-
-            for _, h in filtered_h.iterrows():
-                is_active = h["status"] == "ACTIVE"
-                card_cls = "active" if is_active else "inactive"
-                badge_cls = "badge-active" if is_active else "badge-removed"
-                badge_text = "ACTIVE" if is_active else "REMOVED"
-                st.markdown(f'''
-                <div class="batch-card {card_cls}">
-                    <div style="display:flex;justify-content:space-between;align-items:center;">
-                        <span class="title">Batch #{h['id']} &mdash; {h['filename']}</span>
-                        <span class="badge {badge_cls}">{badge_text}</span>
-                    </div>
-                    <div class="meta">
-                        <b>{h['date_min']}</b> to <b>{h['date_max']}</b> &nbsp;&bull;&nbsp;
-                        {h['row_count']:,} rows &nbsp;&bull;&nbsp;
-                        {h['total_units']:,} units &nbsp;&bull;&nbsp;
-                        <b>${h['net_sales']:,.2f}</b> net<br>
-                        Uploaded {h['uploaded_at']}
-                    </div>
-                </div>
-                ''', unsafe_allow_html=True)
-
-            # Batch removal
-            st.markdown("")
-            active_batches = history[history["status"] == "ACTIVE"]
-            if len(active_batches) > 1:
-                st.markdown('<p class="sec-title">Remove a Batch</p>', unsafe_allow_html=True)
-                batch_opts = [f"#{r['id']} — {r['filename']} ({r['date_min']} to {r['date_max']})"
-                              for _, r in active_batches.iterrows()]
-                sel_batch = st.selectbox("Select batch", batch_opts, label_visibility="collapsed")
-                batch_id = int(sel_batch.split("#")[1].split(" ")[0])
-                if st.button("Remove Batch", type="secondary"):
-                    deactivate_upload(batch_id)
-                    st.success(f"Batch #{batch_id} removed.")
-                    st.cache_data.clear()
-                    st.rerun()
-            elif len(active_batches) == 1:
-                st.caption("Only one active batch — cannot remove the last one.")
+                elif len(active_batches) == 1:
+                    st.caption("Only one active batch — cannot remove the last one.")
 
 # ── Guard: stop if no data for chart tabs ────────────────────────────────────
 if not has_data:
@@ -627,23 +680,49 @@ if f.empty:
 # TAB 1: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
+    # View toggle
+    _vt1, _vt2 = st.columns([3, 1])
+    with _vt2:
+        trend_view = st.radio("Trend view", ["Daily", "Weekly"], horizontal=True,
+                              label_visibility="collapsed", key="trend_view")
     c1, c2 = st.columns([3, 2])
     with c1:
-        daily = f.groupby("sales_date").agg(
-            Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+        if trend_view == "Weekly":
+            _wk = f.copy()
+            _wk["_week"] = _wk["sales_date"].dt.to_period("W")
+            trend_data = _wk.groupby("_week").agg(
+                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+            trend_data["_x"] = trend_data["_week"].apply(lambda p: p.start_time)
+            trend_data["_label"] = trend_data["_week"].apply(
+                lambda p: f"{p.start_time.strftime('%b %d')} – {p.end_time.strftime('%b %d')}")
+            x_vals = trend_data["_x"]
+            hover_tpl = "<b>%{customdata[0]}</b><br>$%{y:,.2f}<extra></extra>"
+            custom_data = trend_data[["_label"]].values
+            chart_title = "Weekly Revenue Trend"
+        else:
+            trend_data = f.groupby("sales_date").agg(
+                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+            x_vals = trend_data["sales_date"]
+            hover_tpl = "<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>"
+            custom_data = None
+            chart_title = "Daily Revenue Trend"
+
         fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=daily["sales_date"], y=daily["Revenue"], mode="lines",
+        _scatter_kw = dict(
+            x=x_vals, y=trend_data["Revenue"], mode="lines",
             line=dict(color=ACCENT, width=3, shape="spline"),
             fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
-            hovertemplate="<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>", name="Revenue"))
-        if len(daily) > 3:
-            daily["MA"] = daily["Revenue"].rolling(min(7, len(daily)), min_periods=1).mean()
+            hovertemplate=hover_tpl, name="Revenue")
+        if custom_data is not None:
+            _scatter_kw["customdata"] = custom_data
+        fig.add_trace(go.Scatter(**_scatter_kw))
+        if len(trend_data) > 3:
+            trend_data["MA"] = trend_data["Revenue"].rolling(min(7, len(trend_data)), min_periods=1).mean()
             fig.add_trace(go.Scatter(
-                x=daily["sales_date"], y=daily["MA"], mode="lines",
+                x=x_vals, y=trend_data["MA"], mode="lines",
                 line=dict(color=ACCENT2, width=2, dash="dot"),
                 hovertemplate="Moving Avg: $%{y:,.2f}<extra></extra>", name="Moving Avg"))
-        fig.update_layout(**CL, title="Daily Revenue Trend", height=380,
+        fig.update_layout(**CL, title=chart_title, height=380,
                           legend=dict(orientation="h", y=1.12))
         fig.update_xaxes(gridcolor=GRID)
         fig.update_yaxes(gridcolor=GRID)
@@ -666,31 +745,33 @@ with tab1:
 
     c3, c4 = st.columns(2)
     with c3:
-        cat_data = (f.groupby("menu_category").agg(Revenue=("net_sales", "sum"))
-                    .reset_index().sort_values("Revenue", ascending=False))
+        cat_data = (f.groupby("menu_category").agg(
+            Revenue=("net_sales", "sum"), Units=("primary_units", "sum"))
+            .reset_index().sort_values("Revenue", ascending=False))
         fig_cat = go.Figure(go.Bar(
             x=cat_data["menu_category"], y=cat_data["Revenue"],
             marker=dict(color=cat_data["Revenue"],
                         colorscale=[[0, PAL[2]], [0.5, PAL[0]], [1, PAL[9]]]),
-            text=[f"${v:,.0f}" for v in cat_data["Revenue"]],
+            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(cat_data["Revenue"], cat_data["Units"])],
             textposition="outside", textfont=dict(size=10),
             hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>"))
-        fig_cat.update_layout(**CL, title="Revenue by Category", height=400)
+        fig_cat.update_layout(**CL, title="Revenue by Category ($ & units)", height=400)
         fig_cat.update_xaxes(tickangle=-30, gridcolor=GRID)
         fig_cat.update_yaxes(gridcolor=GRID)
         st.plotly_chart(fig_cat, width="stretch")
 
     with c4:
-        top10 = (f.groupby("product")["net_sales"].sum().nlargest(10)
-                 .reset_index().sort_values("net_sales"))
+        top10 = (f.groupby("product").agg(
+            net_sales=("net_sales", "sum"), units=("primary_units", "sum"))
+            .nlargest(10, "net_sales").sort_values("net_sales"))
         fig_t = go.Figure(go.Bar(
-            x=top10["net_sales"], y=top10["product"], orientation="h",
+            x=top10["net_sales"], y=top10.index, orientation="h",
             marker=dict(color=top10["net_sales"],
                         colorscale=[[0, PAL[2]], [0.5, PAL[0]], [1, PAL[9]]]),
-            text=[f"${v:,.0f}" for v in top10["net_sales"]],
+            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(top10["net_sales"], top10["units"])],
             textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
             hovertemplate="<b>%{y}</b><br>$%{x:,.2f}<extra></extra>"))
-        fig_t.update_layout(**CL, title="Top 10 Products", height=400)
+        fig_t.update_layout(**CL, title="Top 10 Products ($ & units)", height=400)
         fig_t.update_xaxes(visible=False)
         fig_t.update_yaxes(gridcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_t, width="stretch")
@@ -805,6 +886,368 @@ with tab2:
                          tickfont=dict(color=TEXT_COLOR), title_font_color=TEXT_COLOR)
     st.plotly_chart(fig_par, width="stretch")
 
+
+    # ── Combo / BYO Analysis ─────────────────────────────────────────────────
+    import re
+    combo_keywords = ["BYO", "Combo", r"Bowl \(2", r"Bowl \(3", r"Bowl \(1"]
+    combo_mask = f["product"].str.contains("|".join(combo_keywords), case=False, na=False, regex=True)
+    combo_df = f[combo_mask]
+    non_combo_df = f[~combo_mask]
+
+    # Real extras data: modifier rows that say "(with Parent Item)"
+    has_extras = not f_extras.empty and f_extras["product"].str.contains(r"\(with ", na=False).any()
+    if has_extras:
+        real_extras = f_extras[f_extras["product"].str.contains(r"\(with ", na=False)].copy()
+        real_extras["extra_item"] = real_extras["product"].str.extract(r"^(.+?) \(with ")[0]
+        real_extras["parent_item"] = real_extras["product"].str.extract(r"\(with (.+?)\)$")[0]
+    else:
+        real_extras = pd.DataFrame()
+    if not combo_df.empty:
+        st.markdown('<p class="sec-title">Combo / BYO Performance</p>', unsafe_allow_html=True)
+        cb1, cb2, cb3 = st.columns(3)
+        combo_rev = combo_df["net_sales"].sum()
+        combo_units = combo_df["primary_units"].sum()
+        non_combo_rev = non_combo_df["net_sales"].sum()
+        non_combo_units = non_combo_df["primary_units"].sum()
+        with cb1:
+            fig_combo_pie = go.Figure(go.Pie(
+                labels=["Combo/BYO", "Regular Items"],
+                values=[combo_rev, non_combo_rev], hole=0.5,
+                marker=dict(colors=[PAL[4], PAL[1]]),
+                textinfo="label+percent",
+                hovertemplate="<b>%{label}</b><br>$%{value:,.2f}<extra></extra>"))
+            fig_combo_pie.update_layout(**CL, title="Revenue Split", height=300, showlegend=False)
+            fig_combo_pie.add_annotation(text=f"<b>${combo_rev:,.0f}</b><br><span style='font-size:10px'>combo</span>",
+                                         x=0.5, y=0.5, font_size=14, font_color=TEXT_COLOR, showarrow=False)
+            st.plotly_chart(fig_combo_pie, width="stretch")
+        with cb2:
+            combo_items = combo_df.groupby("product").agg(
+                rev=("net_sales","sum"), units=("primary_units","sum")).sort_values("rev", ascending=False)
+            fig_combo_bar = go.Figure(go.Bar(
+                x=combo_items["rev"], y=combo_items.index, orientation="h",
+                marker=dict(color=PAL[4]),
+                text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(combo_items["rev"], combo_items["units"])],
+                textposition="outside", textfont=dict(size=10, color=TEXT_COLOR)))
+            fig_combo_bar.update_layout(**CL, title="Combo Items Ranked", height=300)
+            fig_combo_bar.update_xaxes(visible=False)
+            fig_combo_bar.update_yaxes(gridcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_combo_bar, width="stretch")
+        with cb3:
+            combo_avg = combo_rev / combo_units if combo_units else 0
+            non_combo_avg = non_combo_rev / non_combo_units if non_combo_units else 0
+            st.markdown(f"""
+            <div style="padding:1rem;">
+                <h4 style="color:{TEXT_COLOR};">Combo vs Regular</h4>
+                <p><b>Combo avg $/unit:</b> ${combo_avg:,.2f}</p>
+                <p><b>Regular avg $/unit:</b> ${non_combo_avg:,.2f}</p>
+                <p><b>Combo units:</b> {combo_units:,.0f} ({combo_units/(combo_units+non_combo_units)*100:.1f}%)</p>
+                <p><b>Combo revenue:</b> ${combo_rev:,.0f} ({combo_rev/net*100:.1f}%)</p>
+                <p style="margin-top:0.8rem;color:{PAL[4]};font-weight:700;">
+                    {'Combos drive higher revenue per unit!' if combo_avg > non_combo_avg else 'Regular items have higher per-unit revenue.'}
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── Combo Deep Dive: Co-purchased items & Recommendations ─────────
+        st.markdown('<p class="sec-title">Combo Deep Dive: What Sells With Combos?</p>',
+                    unsafe_allow_html=True)
+
+        # ── Real Add-On Data (from Extras in Excel) ───────────────────────
+        if not real_extras.empty:
+            st.markdown('<p class="sec-title" style="font-size:0.95rem;">Actual Customer Add-Ons (from POS Extras data)</p>',
+                        unsafe_allow_html=True)
+            rx1, rx2, rx3 = st.columns(3)
+            with rx1:
+                # Most popular add-ons
+                addon_rank = (real_extras.groupby("extra_item").agg(
+                    times=("primary_units", "sum"), rev=("net_sales", "sum"))
+                    .sort_values("times", ascending=False).reset_index())
+                fig_addon = go.Figure(go.Bar(
+                    x=addon_rank["extra_item"], y=addon_rank["times"],
+                    marker=dict(color=[PAL[i % len(PAL)] for i in range(len(addon_rank))]),
+                    text=[f"{t:,.0f} times · ${r:,.2f}" for t, r in
+                          zip(addon_rank["times"], addon_rank["rev"])],
+                    textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
+                    hovertemplate="<b>%{x}</b><br>%{y:,.0f} add-ons<extra></extra>"))
+                fig_addon.update_layout(**CL, title="Most Popular Add-Ons", height=300)
+                fig_addon.update_xaxes(gridcolor=GRID)
+                fig_addon.update_yaxes(gridcolor=GRID)
+                st.plotly_chart(fig_addon, width="stretch")
+
+            with rx2:
+                # Which parent items get the most add-ons?
+                parent_rank = (real_extras.groupby("parent_item").agg(
+                    addons=("primary_units", "sum"), rev=("net_sales", "sum"))
+                    .sort_values("addons", ascending=False).reset_index())
+                fig_parent = go.Figure(go.Bar(
+                    y=parent_rank["parent_item"], x=parent_rank["addons"], orientation="h",
+                    marker=dict(color=PAL[4]),
+                    text=[f"{a:,.0f} add-ons · ${r:,.2f}" for a, r in
+                          zip(parent_rank["addons"], parent_rank["rev"])],
+                    textposition="outside", textfont=dict(size=10, color=TEXT_COLOR)))
+                fig_parent.update_layout(**CL, title="Items That Get Most Add-Ons", height=300)
+                fig_parent.update_xaxes(visible=False)
+                fig_parent.update_yaxes(gridcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_parent, width="stretch")
+
+            with rx3:
+                # Pairing heatmap: parent × add-on
+                pair_real = (real_extras.groupby(["parent_item", "extra_item"])["primary_units"]
+                             .sum().reset_index())
+                pair_piv_real = pair_real.pivot_table(
+                    index="extra_item", columns="parent_item",
+                    values="primary_units", fill_value=0)
+                pair_piv_real = pair_piv_real.loc[
+                    pair_piv_real.sum(axis=1).sort_values(ascending=True).index]
+                fig_pair_real = go.Figure(go.Heatmap(
+                    z=pair_piv_real.values,
+                    x=[c[:18] for c in pair_piv_real.columns.tolist()],
+                    y=pair_piv_real.index.tolist(),
+                    colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
+                                [0.3, PAL[5] + "55"], [0.6, PAL[0]], [1, PAL[4]]],
+                    hovertemplate="<b>%{y}</b> added to <b>%{x}</b><br>%{z:,.0f} times<extra></extra>",
+                    texttemplate="%{z:,.0f}", textfont=dict(size=12)))
+                fig_pair_real.update_layout(**CL, title="Add-On × Item Heatmap",
+                                            height=max(250, len(pair_piv_real) * 40 + 80))
+                st.plotly_chart(fig_pair_real, width="stretch")
+
+            # Add-on attach rate
+            total_combo_units = combo_df["primary_units"].sum()
+            total_addon_units = real_extras["primary_units"].sum()
+            attach_rate = total_addon_units / total_combo_units * 100 if total_combo_units else 0
+            addon_rev = real_extras["net_sales"].sum()
+            st.markdown(f"""
+            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:0.5rem 0 1rem;">
+                <div style="padding:0.8rem 1.2rem;background:{'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'};
+                            border-radius:10px;border:1px solid {'#e8e8e8' if not dark else '#30363d'};">
+                    <span style="font-size:1.5rem;font-weight:700;color:{PAL[4]};">{attach_rate:.0f}%</span>
+                    <span style="color:{TEXT_COLOR};margin-left:0.5rem;">Add-on attach rate</span>
+                    <span style="color:#888;margin-left:0.3rem;">({total_addon_units:,.0f} add-ons / {total_combo_units:,.0f} combo units)</span>
+                </div>
+                <div style="padding:0.8rem 1.2rem;background:{'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'};
+                            border-radius:10px;border:1px solid {'#e8e8e8' if not dark else '#30363d'};">
+                    <span style="font-size:1.5rem;font-weight:700;color:{PAL[0]};">${addon_rev:,.2f}</span>
+                    <span style="color:{TEXT_COLOR};margin-left:0.5rem;">Total add-on revenue</span>
+                    <span style="color:#888;margin-left:0.3rem;">(avg ${addon_rev/total_addon_units:,.2f}/add-on)</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Categorize side types for smarter analysis
+        side_cats = ["Drinks", "Sides (Hot)", "Chutney", "Dessert", "Street Food"]
+        has_cat = "menu_category" in f.columns
+
+        # Co-purchase analysis: items bought on same date+outlet as combo items
+        combo_dates = combo_df[["sales_date", "outlet"]].drop_duplicates()
+        non_combo_with_combo = non_combo_df.merge(combo_dates, on=["sales_date", "outlet"])
+        non_combo_without_combo = non_combo_df[~non_combo_df.index.isin(
+            non_combo_with_combo.index)] if len(non_combo_with_combo) < len(non_combo_df) else pd.DataFrame()
+
+        if not non_combo_with_combo.empty:
+            cd1, cd2 = st.columns(2)
+            with cd1:
+                # Top items sold alongside combos — grouped by category
+                copurch = (non_combo_with_combo.groupby(["product"] + (["menu_category"] if has_cat else [])).agg(
+                    rev=("net_sales", "sum"), units=("primary_units", "sum"),
+                    days=("sales_date", "nunique")).reset_index()
+                    .sort_values("units", ascending=False))
+                top_copurch = copurch.head(12)
+                bar_colors = []
+                cat_color_map = {
+                    "Drinks": PAL[0], "Sides (Hot)": PAL[1], "Chutney": PAL[3],
+                    "Dessert": PAL[4], "Street Food": PAL[5], "Pizza": PAL[6],
+                    "Specials Daily": PAL[7], "Togos (Chilled)": PAL[8]}
+                if has_cat:
+                    bar_colors = [cat_color_map.get(c, PAL[2]) for c in top_copurch["menu_category"]]
+                else:
+                    bar_colors = PAL[0]
+                fig_copurch = go.Figure(go.Bar(
+                    y=top_copurch["product"], x=top_copurch["units"], orientation="h",
+                    marker=dict(color=bar_colors),
+                    text=[f"{u:,.0f} units · ${v:,.0f}" for u, v in
+                          zip(top_copurch["units"], top_copurch["rev"])],
+                    textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
+                    hovertemplate="<b>%{y}</b><br>%{x:,.0f} units<extra></extra>"))
+                fig_copurch.update_layout(**CL, title="Top Add-Ons Sold With Combos",
+                                          height=max(350, len(top_copurch) * 30 + 80))
+                fig_copurch.update_xaxes(visible=False)
+                fig_copurch.update_yaxes(gridcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_copurch, width="stretch")
+
+            with cd2:
+                # Category breakdown of what sells with combos
+                if has_cat:
+                    cat_copurch = (non_combo_with_combo.groupby("menu_category").agg(
+                        rev=("net_sales", "sum"), units=("primary_units", "sum")).reset_index()
+                        .sort_values("rev", ascending=False))
+                    fig_cat_co = go.Figure(go.Pie(
+                        labels=cat_copurch["menu_category"], values=cat_copurch["units"], hole=0.5,
+                        marker=dict(colors=[cat_color_map.get(c, PAL[2]) for c in cat_copurch["menu_category"]]),
+                        textinfo="label+percent",
+                        hovertemplate="<b>%{label}</b><br>%{value:,.0f} units<br>%{percent}<extra></extra>"))
+                    fig_cat_co.update_layout(**CL, title="Add-On Categories With Combos",
+                                             height=350, showlegend=False)
+                    fig_cat_co.add_annotation(
+                        text=f"<b>{non_combo_with_combo['primary_units'].sum():,.0f}</b><br>"
+                             f"<span style='font-size:10px'>add-on units</span>",
+                        x=0.5, y=0.5, font_size=14, font_color=TEXT_COLOR, showarrow=False)
+                    st.plotly_chart(fig_cat_co, width="stretch")
+                else:
+                    # Combo item breakdown by day of week
+                    combo_dow = (combo_df.groupby(["product", "day_of_week"]).agg(
+                        units=("primary_units", "sum")).reset_index())
+                    dow_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                    combo_prods = combo_df.groupby("product")["primary_units"].sum().nlargest(6).index.tolist()
+                    fig_combo_dow = go.Figure()
+                    for i, prod in enumerate(combo_prods):
+                        pdata = combo_dow[combo_dow["product"] == prod]
+                        pdata = pdata.copy()
+                        pdata["day_of_week"] = pd.Categorical(pdata["day_of_week"],
+                                                               categories=dow_order, ordered=True)
+                        pdata = pdata.sort_values("day_of_week")
+                        fig_combo_dow.add_trace(go.Bar(
+                            x=pdata["day_of_week"], y=pdata["units"], name=prod,
+                            marker=dict(color=PAL[i % len(PAL)])))
+                    fig_combo_dow.update_layout(**CL, title="Combo Sales by Day of Week",
+                                                height=350, barmode="group",
+                                                legend=dict(orientation="h", y=-0.25, font_size=9))
+                    st.plotly_chart(fig_combo_dow, width="stretch")
+
+            # ── Combo + Drink/Side Pairing Matrix ──────────────────────────
+            st.markdown('<p class="sec-title">Combo + Side Pairing Analysis</p>',
+                        unsafe_allow_html=True)
+
+            # Build pairing matrix: for each combo product, what sides sell on the same day
+            combo_prods_list = combo_df.groupby("product")["primary_units"].sum().nlargest(5).index.tolist()
+            side_items = non_combo_with_combo.copy()
+            if has_cat:
+                side_items = side_items[side_items["menu_category"].isin(side_cats)]
+            top_sides = side_items.groupby("product")["primary_units"].sum().nlargest(10).index.tolist()
+
+            if top_sides and combo_prods_list:
+                pair_data = []
+                for cp in combo_prods_list:
+                    cp_dates = combo_df[combo_df["product"] == cp][["sales_date", "outlet"]].drop_duplicates()
+                    cp_sides = side_items.merge(cp_dates, on=["sales_date", "outlet"])
+                    for sp in top_sides:
+                        sp_units = cp_sides[cp_sides["product"] == sp]["primary_units"].sum()
+                        pair_data.append({"combo": cp, "side": sp, "units": sp_units})
+                pair_df = pd.DataFrame(pair_data)
+                pair_piv = pair_df.pivot_table(index="side", columns="combo", values="units", fill_value=0)
+                # Sort by total
+                pair_piv = pair_piv.loc[pair_piv.sum(axis=1).sort_values(ascending=True).index]
+
+                fig_pair = go.Figure(go.Heatmap(
+                    z=pair_piv.values, x=[c[:20] for c in pair_piv.columns.tolist()],
+                    y=pair_piv.index.tolist(),
+                    colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
+                                [0.3, PAL[5] + "55"], [0.6, PAL[0]], [1, PAL[4]]],
+                    hovertemplate="<b>%{y}</b> + <b>%{x}</b><br>%{z:,.0f} units together<extra></extra>",
+                    texttemplate="%{z:,.0f}", textfont=dict(size=11)))
+                fig_pair.update_layout(**CL, title="Pairing Heatmap: Combo × Side Item (units sold together)",
+                                       height=max(300, len(top_sides) * 30 + 100))
+                st.plotly_chart(fig_pair, width="stretch")
+
+            # ── Combo day vs non-combo day lift ────────────────────────────
+            combo_day_count = combo_dates["sales_date"].nunique()
+            all_day_count = f["sales_date"].nunique()
+            non_combo_day_count = max(all_day_count - combo_day_count, 1)
+
+            lt1, lt2 = st.columns(2)
+            with lt1:
+                # Combo by day of week
+                combo_dow = (combo_df.groupby(["product", "day_of_week"]).agg(
+                    units=("primary_units", "sum")).reset_index())
+                dow_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                combo_prods_top = combo_df.groupby("product")["primary_units"].sum().nlargest(5).index.tolist()
+                fig_combo_dow = go.Figure()
+                for i, prod in enumerate(combo_prods_top):
+                    pdata = combo_dow[combo_dow["product"] == prod].copy()
+                    pdata["day_of_week"] = pd.Categorical(pdata["day_of_week"],
+                                                           categories=dow_order, ordered=True)
+                    pdata = pdata.sort_values("day_of_week")
+                    fig_combo_dow.add_trace(go.Bar(
+                        x=pdata["day_of_week"], y=pdata["units"], name=prod[:25],
+                        marker=dict(color=PAL[i % len(PAL)]),
+                        hovertemplate=f"<b>{prod[:25]}</b><br>%{{x}}: %{{y:,.0f}} units<extra></extra>"))
+                fig_combo_dow.update_layout(**CL, title="Combo Sales by Day of Week",
+                                            height=350, barmode="group",
+                                            legend=dict(orientation="h", y=-0.25, font_size=9))
+                fig_combo_dow.update_xaxes(gridcolor=GRID)
+                fig_combo_dow.update_yaxes(gridcolor=GRID)
+                st.plotly_chart(fig_combo_dow, width="stretch")
+
+            with lt2:
+                # Recommendations panel
+                combo_best_day = combo_df.groupby("day_of_week")["net_sales"].sum().sort_values(ascending=False)
+                best_day = combo_best_day.index[0] if not combo_best_day.empty else "N/A"
+                worst_day = combo_best_day.index[-1] if len(combo_best_day) > 1 else "N/A"
+                combo_pct_days = combo_day_count / all_day_count * 100
+                avg_combo_basket = (combo_rev + non_combo_with_combo["net_sales"].sum()) / combo_day_count
+
+                # Find top pairing for each combo
+                top_pairings = []
+                for cp in combo_prods_list[:3]:
+                    cp_dates = combo_df[combo_df["product"] == cp][["sales_date", "outlet"]].drop_duplicates()
+                    cp_sides = side_items.merge(cp_dates, on=["sales_date", "outlet"])
+                    if not cp_sides.empty:
+                        best_side = cp_sides.groupby("product")["primary_units"].sum().idxmax()
+                        best_units = cp_sides.groupby("product")["primary_units"].sum().max()
+                        top_pairings.append((cp, best_side, best_units))
+
+                panel_bg = 'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'
+                border_c = '#e8e8e8' if not dark else '#30363d'
+                st.markdown(f"""
+                <div style="padding:1.2rem;background:{panel_bg};border-radius:12px;border:1px solid {border_c};">
+                    <h4 style="color:{PAL[4]};margin-bottom:0.6rem;">Best Combo Pairings</h4>
+                """, unsafe_allow_html=True)
+                for cp, side, u in top_pairings:
+                    st.markdown(f"<p style='margin:0.3rem 0;'><b>{cp[:30]}</b> + <b>{side}</b> "
+                                f"({u:,.0f} units together)</p>", unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <hr style="border-color:{border_c};">
+                <h4 style="color:{PAL[0]};margin-bottom:0.5rem;">Revenue Prediction</h4>
+                <p><b>Combo day avg basket:</b> ${avg_combo_basket:,.0f}/day</p>
+                <p><b>Best combo day:</b> {best_day} (${combo_best_day.iloc[0]:,.0f})</p>
+                <p><b>Weakest combo day:</b> {worst_day} — promote combos more here</p>
+                """, unsafe_allow_html=True)
+
+                if combo_pct_days < 100:
+                    avg_regular_basket = non_combo_df["net_sales"].sum() / non_combo_day_count if non_combo_day_count > 0 else 0
+                    uplift = (avg_combo_basket - avg_regular_basket) * non_combo_day_count
+                    st.markdown(f"""
+                    <p style="margin-top:0.5rem;color:{PAL[4]};font-weight:700;">
+                    If every operating day had combo availability, estimated additional revenue:
+                    ~${uplift:,.0f}</p>
+                    """, unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <hr style="border-color:{border_c};">
+                <h4 style="color:{PAL[1]};margin-bottom:0.5rem;">Recommended New Combos</h4>
+                <p>Based on co-purchase patterns, consider bundling:</p>
+                """, unsafe_allow_html=True)
+
+                # Generate smart recommendations based on actual data
+                if top_pairings:
+                    drinks_sold = side_items[side_items["menu_category"] == "Drinks"]["product"].value_counts() if has_cat else pd.Series(dtype=int)
+                    sides_sold = side_items[side_items["menu_category"].isin(["Sides (Hot)", "Chutney"])]["product"].value_counts() if has_cat else pd.Series(dtype=int)
+                    top_drink = drinks_sold.index[0] if not drinks_sold.empty else "a drink"
+                    top_side = sides_sold.index[0] if not sides_sold.empty else "a side"
+
+                    for cp, best_side, _ in top_pairings[:2]:
+                        st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"{cp[:25]} + {top_drink} + {top_side}\"</b> "
+                                    f"meal deal</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"Combo {worst_day}\"</b> weekly special "
+                                f"to boost the weakest day</p>", unsafe_allow_html=True)
+                    if not drinks_sold.empty and len(drinks_sold) > 1:
+                        second_drink = drinks_sold.index[1]
+                        st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"Any BYO Bowl + {second_drink}\"</b> "
+                                    f"— {second_drink} has untapped pairing potential</p>",
+                                    unsafe_allow_html=True)
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: PEAK TIMES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -826,9 +1269,10 @@ with tab3:
     with c1:
         colors = [ACCENT3 if d == best_day else "#e74c3c" if d == worst_day else ACCENT2
                   for d in dow["day_of_week"]]
-        fig_dow = go.Figure(go.Bar(
+        fig_dow = go.Figure()
+        fig_dow.add_trace(go.Bar(
             x=dow["day_of_week"].astype(str), y=dow["Avg_Rev"],
-            marker=dict(color=colors, opacity=0.85),
+            marker=dict(color=colors, opacity=0.85), name="Revenue",
             text=[f"${v:,.0f}" for v in dow["Avg_Rev"]], textposition="outside",
             hovertemplate="<b>%{x}</b><br>$%{y:,.2f}/day<extra></extra>"))
         fig_dow.update_layout(**CL, height=400,
@@ -837,12 +1281,13 @@ with tab3:
         fig_dow.update_yaxes(gridcolor=GRID, title_text="Avg Revenue ($)")
         st.plotly_chart(fig_dow, width="stretch")
     with c2:
-        fig_dow_u = go.Figure(go.Bar(
+        fig_dow_u = go.Figure()
+        fig_dow_u.add_trace(go.Bar(
             x=dow["day_of_week"].astype(str), y=dow["Avg_Units"],
-            marker=dict(color=ACCENT, opacity=0.85),
+            marker=dict(color=ACCENT, opacity=0.85), name="Units",
             text=[f"{v:,.0f}" for v in dow["Avg_Units"]], textposition="outside",
             hovertemplate="<b>%{x}</b><br>%{y:,.0f} units/day<extra></extra>"))
-        fig_dow_u.update_layout(**CL, title="Avg Units by Day", height=400)
+        fig_dow_u.update_layout(**CL, title="Avg Units Sold by Day", height=400)
         fig_dow_u.update_xaxes(gridcolor=GRID)
         fig_dow_u.update_yaxes(gridcolor=GRID, title_text="Avg Units")
         st.plotly_chart(fig_dow_u, width="stretch")
@@ -864,27 +1309,73 @@ with tab3:
     fig_hm.update_layout(**CL, title="Which outlets peak on which days?", height=350)
     st.plotly_chart(fig_hm, width="stretch")
 
-    # Daily bars
-    daily2 = (f.groupby("sales_date").agg(Rev=("net_sales", "sum"))
-              .reset_index().sort_values("sales_date"))
-    best = daily2.loc[daily2["Rev"].idxmax()]
-    worst = daily2.loc[daily2["Rev"].idxmin()]
-    fig_d2 = go.Figure(go.Bar(
-        x=daily2["sales_date"], y=daily2["Rev"],
-        marker=dict(color=[
-            ACCENT3 if r["sales_date"] == best["sales_date"]
-            else "#e74c3c" if r["sales_date"] == worst["sales_date"]
-            else ACCENT2 for _, r in daily2.iterrows()], opacity=0.8),
-        text=[f"${v:,.0f}" for v in daily2["Rev"]],
-        textposition="outside", textfont=dict(size=10),
-        hovertemplate="<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>"))
-    fig_d2.update_layout(**CL, height=400,
-        title=(f"Daily Revenue — Best: {best['sales_date'].strftime('%a %b %d')} "
-               f"(${best['Rev']:,.0f}) | Worst: {worst['sales_date'].strftime('%a %b %d')} "
-               f"(${worst['Rev']:,.0f})"))
-    fig_d2.update_xaxes(gridcolor=GRID)
-    fig_d2.update_yaxes(gridcolor=GRID)
-    st.plotly_chart(fig_d2, width="stretch")
+    # Weekly summary table
+    st.markdown('<p class="sec-title">Weekly Summary</p>', unsafe_allow_html=True)
+    weekly = f.groupby(f["sales_date"].dt.to_period("W")).agg(
+        Revenue=("net_sales", "sum"), Units=("primary_units", "sum"),
+        Days=("sales_date", "nunique"), Products=("product", "nunique")).reset_index()
+    weekly["sales_date"] = weekly["sales_date"].apply(
+        lambda p: f"{p.start_time.strftime('%b %d')} – {p.end_time.strftime('%b %d')}")
+    weekly["Avg/Day"] = weekly["Revenue"] / weekly["Days"]
+    weekly.columns = ["Week", "Revenue", "Units", "Days", "Products", "Avg/Day"]
+    weekly_display = weekly.copy()
+    weekly_display["Revenue"] = weekly_display["Revenue"].apply(lambda v: f"${v:,.0f}")
+    weekly_display["Units"] = weekly_display["Units"].apply(lambda v: f"{v:,.0f}")
+    weekly_display["Avg/Day"] = weekly_display["Avg/Day"].apply(lambda v: f"${v:,.0f}")
+    st.dataframe(weekly_display, width="stretch", hide_index=True)
+
+    # Week-over-week comparison chart
+    if len(weekly) > 1:
+        st.markdown('<p class="sec-title">Week-over-Week Comparison</p>', unsafe_allow_html=True)
+        ww1, ww2 = st.columns(2)
+        with ww1:
+            fig_ww = go.Figure()
+            fig_ww.add_trace(go.Bar(
+                x=weekly["Week"], y=weekly["Revenue"],
+                marker=dict(color=PAL[0]),
+                text=[f"${v:,.0f}" for v in weekly["Revenue"]],
+                textposition="outside", textfont=dict(size=11, color=TEXT_COLOR),
+                hovertemplate="<b>%{x}</b><br>Revenue: $%{y:,.0f}<extra></extra>",
+                name="Revenue"))
+            # Add % change annotations
+            for i in range(1, len(weekly)):
+                prev_rev = weekly.iloc[i - 1]["Revenue"]
+                curr_rev = weekly.iloc[i]["Revenue"]
+                if prev_rev > 0:
+                    pct_change = (curr_rev - prev_rev) / prev_rev * 100
+                    color = "#22c55e" if pct_change >= 0 else "#ef4444"
+                    fig_ww.add_annotation(
+                        x=weekly.iloc[i]["Week"], y=curr_rev * 1.15,
+                        text=f"{'+'if pct_change>=0 else ''}{pct_change:.1f}%",
+                        showarrow=False, font=dict(size=12, color=color, weight="bold"))
+            fig_ww.update_layout(**CL, title="Weekly Revenue (with % change)", height=380)
+            fig_ww.update_xaxes(gridcolor=GRID)
+            fig_ww.update_yaxes(gridcolor=GRID)
+            st.plotly_chart(fig_ww, width="stretch")
+
+        with ww2:
+            fig_wu = go.Figure()
+            fig_wu.add_trace(go.Bar(
+                x=weekly["Week"], y=weekly["Units"],
+                marker=dict(color=PAL[4]),
+                text=[f"{v:,.0f}" for v in weekly["Units"]],
+                textposition="outside", textfont=dict(size=11, color=TEXT_COLOR),
+                hovertemplate="<b>%{x}</b><br>Units: %{y:,.0f}<extra></extra>",
+                name="Units"))
+            for i in range(1, len(weekly)):
+                prev = weekly.iloc[i - 1]["Units"]
+                curr = weekly.iloc[i]["Units"]
+                if prev > 0:
+                    pct = (curr - prev) / prev * 100
+                    color = "#22c55e" if pct >= 0 else "#ef4444"
+                    fig_wu.add_annotation(
+                        x=weekly.iloc[i]["Week"], y=curr * 1.15,
+                        text=f"{'+'if pct>=0 else ''}{pct:.1f}%",
+                        showarrow=False, font=dict(size=12, color=color, weight="bold"))
+            fig_wu.update_layout(**CL, title="Weekly Units (with % change)", height=380)
+            fig_wu.update_xaxes(gridcolor=GRID)
+            fig_wu.update_yaxes(gridcolor=GRID)
+            st.plotly_chart(fig_wu, width="stretch")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 4: LOCATIONS
@@ -901,20 +1392,21 @@ with tab4:
         fig_lb = go.Figure(go.Bar(
             x=ls["outlet"], y=ls["Revenue"],
             marker=dict(color=[LOCATION_COLORS.get(l, "#ccc") for l in ls["outlet"]]),
-            text=[f"${v:,.0f}" for v in ls["Revenue"]], textposition="outside",
+            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(ls["Revenue"], ls["Units"])],
+            textposition="outside",
             hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>"))
-        fig_lb.update_layout(**CL, title="Total Revenue by Outlet", height=400)
+        fig_lb.update_layout(**CL, title="Revenue & Units by Outlet", height=400)
         fig_lb.update_xaxes(tickangle=-30, gridcolor=GRID)
         fig_lb.update_yaxes(gridcolor=GRID)
         st.plotly_chart(fig_lb, width="stretch")
     with c2:
         fig_la = go.Figure(go.Bar(
-            x=ls["outlet"], y=ls["Avg_Daily"],
+            x=ls["outlet"], y=ls["Units"],
             marker=dict(color=[LOCATION_COLORS.get(l, "#ccc") for l in ls["outlet"]],
                         opacity=0.8),
-            text=[f"${v:,.0f}" for v in ls["Avg_Daily"]], textposition="outside",
-            hovertemplate="<b>%{x}</b><br>$%{y:,.2f}/day<extra></extra>"))
-        fig_la.update_layout(**CL, title="Avg Daily Revenue", height=400)
+            text=[f"{v:,.0f} units" for v in ls["Units"]], textposition="outside",
+            hovertemplate="<b>%{x}</b><br>%{y:,.0f} units<extra></extra>"))
+        fig_la.update_layout(**CL, title="Total Units by Outlet", height=400)
         fig_la.update_xaxes(tickangle=-30, gridcolor=GRID)
         fig_la.update_yaxes(gridcolor=GRID)
         st.plotly_chart(fig_la, width="stretch")
@@ -924,12 +1416,12 @@ with tab4:
     ld = f[f["outlet"] == sel]
     lc1, lc2 = st.columns(2)
     with lc1:
-        li = (ld.groupby("product")["net_sales"].sum().nlargest(10)
-              .reset_index().sort_values("net_sales"))
+        li = (ld.groupby("product").agg(rev=("net_sales","sum"), units=("primary_units","sum"))
+              .nlargest(10, "rev").sort_values("rev"))
         fig_li = go.Figure(go.Bar(
-            x=li["net_sales"], y=li["product"], orientation="h",
+            x=li["rev"], y=li.index, orientation="h",
             marker=dict(color=LOCATION_COLORS.get(sel, ACCENT)),
-            text=[f"${v:,.0f}" for v in li["net_sales"]],
+            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(li["rev"], li["units"])],
             textposition="outside", textfont=dict(size=10),
             hovertemplate="<b>%{y}</b><br>$%{x:,.2f}<extra></extra>"))
         fig_li.update_layout(**CL, title=f"Top Items at {sel}", height=380)
@@ -951,15 +1443,28 @@ with tab4:
 # TAB 6: RAW DATA
 # ══════════════════════════════════════════════════════════════════════════════
 with tab6:
-    st.markdown('<p class="sec-title">All Sales Data (Filtered)</p>', unsafe_allow_html=True)
-    show_cols = ["sales_date", "outlet", "menu_category", "product", "primary_units",
-                 "unit_price", "gross_sales", "discount", "net_sales", "filename", "uploaded_at"]
-    display = f[[c for c in show_cols if c in f.columns]].copy()
-    display["sales_date"] = display["sales_date"].dt.strftime("%Y-%m-%d")
-    display.columns = [c.replace("_", " ").title() for c in display.columns]
-    st.dataframe(display, width="stretch", height=500)
-    st.download_button("Download as CSV", display.to_csv(index=False),
-                       "kcampus_data.csv", "text/csv")
+    if not st.session_state.get("upload_unlocked", False):
+        st.markdown("### Restricted Access")
+        st.markdown("Raw data access is restricted to authorized team members.")
+        pin_input_raw = st.text_input("Enter PIN to access", type="password",
+                                      placeholder="Enter PIN", key="pin_input_raw")
+        if pin_input_raw:
+            _pin = os.environ.get("UPLOAD_PIN", "") or "kalachandji2026"
+            if pin_input_raw == _pin:
+                st.session_state.upload_unlocked = True
+                st.rerun()
+            else:
+                st.error("Incorrect PIN.")
+    else:
+        st.markdown('<p class="sec-title">All Sales Data (Filtered)</p>', unsafe_allow_html=True)
+        show_cols = ["sales_date", "outlet", "menu_category", "product", "primary_units",
+                     "unit_price", "gross_sales", "discount", "net_sales", "filename", "uploaded_at"]
+        display = f[[c for c in show_cols if c in f.columns]].copy()
+        display["sales_date"] = display["sales_date"].dt.strftime("%Y-%m-%d")
+        display.columns = [c.replace("_", " ").title() for c in display.columns]
+        st.dataframe(display, width="stretch", height=500)
+        st.download_button("Download as CSV", display.to_csv(index=False),
+                           "kcampus_data.csv", "text/csv")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 7: AI INSIGHTS (Chatbot)

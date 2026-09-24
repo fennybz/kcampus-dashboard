@@ -217,30 +217,53 @@ def parse_campus_excel(uploaded_file, filename):
         dt = pd.Timestamp(date_val)
         location = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
         category = str(row.iloc[4]).strip() if len(row) > 4 and pd.notna(row.iloc[4]) else ""
-        item = str(row.iloc[5]).strip() if pd.notna(row.iloc[5]) else ""
+        parent_item = str(row.iloc[5]).strip() if pd.notna(row.iloc[5]) else ""
+        # Column G: modifier type (Extras, Extra Sauce, etc.)
+        mod_type = str(row.iloc[6]).strip() if len(row) > 6 and pd.notna(row.iloc[6]) else ""
+        # Column H: modifier item name (Tamarind Lemonade, Naan, etc.)
+        mod_item = str(row.iloc[7]).strip() if len(row) > 7 and pd.notna(row.iloc[7]) else ""
         qty = float(row.iloc[8]) if pd.notna(row.iloc[8]) else 0
         unit_price = float(row.iloc[10]) if pd.notna(row.iloc[10]) else 0
         total = float(row.iloc[11]) if pd.notna(row.iloc[11]) else 0
         tax = float(row.iloc[12]) if pd.notna(row.iloc[12]) else 0
         net = float(row.iloc[13]) if pd.notna(row.iloc[13]) else total
 
-        if not item or qty == 0:
-            continue
+        is_extra = mod_type.lower().startswith("extra") and mod_item
 
-        rows.append({
-            "sales_date": dt.strftime("%Y-%m-%d"),
-            "day_of_week": dt.strftime("%A"),
-            "outlet": location,
-            "menu_category": category,
-            "product": item,
-            "row_type": "Primary",
-            "raw_quantity": qty,
-            "primary_units": qty,
-            "modifier_selections": 0,
-            "unit_price": unit_price,
-            "gross_sales": total,
-            "discount": total - net if total > net else 0,
-            "net_sales": net,
-        })
+        if is_extra:
+            # Modifier/add-on row: product = extra item, category = "Extras"
+            rows.append({
+                "sales_date": dt.strftime("%Y-%m-%d"),
+                "day_of_week": dt.strftime("%A"),
+                "outlet": location,
+                "menu_category": "Extras",
+                "product": f"{mod_item} (with {parent_item})",
+                "row_type": "Modifier",
+                "raw_quantity": qty,
+                "primary_units": qty,
+                "modifier_selections": 1,
+                "unit_price": unit_price,
+                "gross_sales": total,
+                "discount": total - net if total > net else 0,
+                "net_sales": net,
+            })
+        else:
+            if not parent_item or qty == 0:
+                continue
+            rows.append({
+                "sales_date": dt.strftime("%Y-%m-%d"),
+                "day_of_week": dt.strftime("%A"),
+                "outlet": location,
+                "menu_category": category,
+                "product": parent_item,
+                "row_type": "Primary",
+                "raw_quantity": qty,
+                "primary_units": qty,
+                "modifier_selections": 0,
+                "unit_price": unit_price,
+                "gross_sales": total,
+                "discount": total - net if total > net else 0,
+                "net_sales": net,
+            })
 
     return pd.DataFrame(rows)
