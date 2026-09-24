@@ -93,11 +93,6 @@ st.markdown("""
         padding: 0.15rem 0; margin-bottom: 0.2rem; }
     /* Compact spacing inside filter strip */
     .filter-strip [data-testid="stVerticalBlock"] { gap: 0.15rem !important; }
-    /* Compact date pills */
-    .filter-strip [data-testid="stPills"] { margin-top: -0.3rem; }
-    .filter-strip [data-testid="stPills"] button {
-        padding: 0.1rem 0.5rem !important; font-size: 0.65rem !important;
-        min-height: 1.4rem !important; border-radius: 1rem !important; }
     /* Icon buttons in filter strip */
     .filter-strip .stButton > button {
         font-size: 1.4rem !important; padding: 0.2rem 0 !important;
@@ -424,21 +419,6 @@ if has_data:
             _date_start, _date_end = sel_dates
         else:
             _date_start, _date_end = _dmin, _dmax
-        # Compact pill presets
-        _preset_map = {"7d": 7, "14d": 14, "30d": 30, "All": None}
-        _cur = st.session_state.get("date_preset", None)
-        _default = next((k for k, v in _preset_map.items() if v == _cur), "All")
-        _pick = st.pills("Quick", list(_preset_map.keys()), default=_default,
-                         label_visibility="collapsed", key="date_pills")
-        if _pick and _pick != _default:
-            if _preset_map[_pick] is None:
-                st.session_state.pop("date_preset", None)
-            else:
-                st.session_state["date_preset"] = _preset_map[_pick]
-            st.rerun()
-        if "date_preset" in st.session_state:
-            _date_start = max(_dmin, _dmax - pd.Timedelta(days=st.session_state["date_preset"] - 1))
-            _date_end = _dmax
     with fc1:
         st.markdown('<div class="filter-label">Semester</div>', unsafe_allow_html=True)
         semesters = sorted(primary["semester"].unique(), key=lambda x: ["Spring","Summer","Fall"].index(x) if x in ["Spring","Summer","Fall"] else 0)
@@ -477,13 +457,12 @@ if has_data:
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Compact date range indicator
+    # Compact date range indicator + chart filter badge
     _ds_fmt = _date_start.strftime("%b %d")
     _de_fmt = _date_end.strftime("%b %d, %Y")
-    _n_days = (_date_end - _date_start).days + 1
     st.markdown(f'<div class="date-range-info">'
                 f'<b style="color:{ACCENT};">{_ds_fmt}</b> - '
-                f'<b style="color:{ACCENT};">{_de_fmt}</b> ({_n_days}d)</div>',
+                f'<b style="color:{ACCENT};">{_de_fmt}</b></div>',
                 unsafe_allow_html=True)
 
     # Apply filters
@@ -496,9 +475,9 @@ if has_data:
     f = primary[mask].copy()
     # Filtered extras (modifiers matching the date range)
     if not extras_all.empty:
-        f_extras = extras_all[
-            (extras_all["sales_date"].dt.date >= _date_start) &
-            (extras_all["sales_date"].dt.date <= _date_end)].copy()
+        _ext_mask = ((extras_all["sales_date"].dt.date >= _date_start) &
+                     (extras_all["sales_date"].dt.date <= _date_end))
+        f_extras = extras_all[_ext_mask].copy()
     else:
         f_extras = pd.DataFrame()
 
@@ -725,33 +704,39 @@ if f.empty:
 # TAB 1: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    _tv1, _tv2 = st.columns([4, 1])
+    _tv1, _tv2, _tv3 = st.columns([4, 1, 1])
     with _tv2:
+        ov_metric = st.radio("Metric", ["Revenue", "Units"], horizontal=True,
+                             label_visibility="collapsed", key="ov_metric")
+    with _tv3:
         trend_view = st.radio("View", ["Daily", "Weekly"], horizontal=True,
                               label_visibility="collapsed", key="trend_view")
+    _is_rev = ov_metric == "Revenue"
+    _val_col = "net_sales" if _is_rev else "primary_units"
+    _fmt = lambda v: f"${v:,.0f}" if _is_rev else f"{v:,.0f}"
+    _hover_fmt = "$%{y:,.2f}" if _is_rev else "%{y:,.0f} units"
     c1, c2 = st.columns([3, 2])
     with c1:
         if trend_view == "Weekly":
             _wk = f.copy()
             _wk["_week"] = _wk["sales_date"].dt.to_period("W")
             wk_trend = _wk.groupby("_week").agg(
-                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+                Val=(_val_col, "sum")).reset_index()
             wk_trend["_label"] = wk_trend["_week"].apply(
                 lambda p: f"{p.start_time.strftime('%b %d')} \u2013 {p.end_time.strftime('%b %d')}")
             wk_trend["_x"] = wk_trend["_week"].apply(lambda p: p.start_time)
             fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=wk_trend["_x"], y=wk_trend["Revenue"], mode="lines+markers",
+                x=wk_trend["_x"], y=wk_trend["Val"], mode="lines+markers",
                 line=dict(color=ACCENT, width=3, shape="spline"),
                 marker=dict(size=10, color=ACCENT),
                 fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
                 customdata=wk_trend[["_label"]].values,
-                hovertemplate="<b>%{customdata[0]}</b><br>$%{y:,.2f}<extra></extra>",
-                name="Revenue"))
-            # % change annotations
+                hovertemplate=f"<b>%{{customdata[0]}}</b><br>{_hover_fmt}<extra></extra>",
+                name=ov_metric))
             for i in range(1, len(wk_trend)):
-                prev = wk_trend.iloc[i - 1]["Revenue"]
-                curr = wk_trend.iloc[i]["Revenue"]
+                prev = wk_trend.iloc[i - 1]["Val"]
+                curr = wk_trend.iloc[i]["Val"]
                 if prev > 0:
                     pct = (curr - prev) / prev * 100
                     color = "#22c55e" if pct >= 0 else "#ef4444"
@@ -759,45 +744,50 @@ with tab1:
                         x=wk_trend.iloc[i]["_x"], y=curr * 1.08,
                         text=f"{'+'if pct>=0 else ''}{pct:.1f}%",
                         showarrow=False, font=dict(size=11, color=color, weight="bold"))
-            fig.update_layout(**CL, title="Weekly Revenue Trend", height=380,
+            fig.update_layout(**CL, title=f"Weekly {ov_metric} Trend", height=380,
                               legend=dict(orientation="h", y=1.12))
             fig.update_xaxes(gridcolor=GRID)
             fig.update_yaxes(gridcolor=GRID)
             st.plotly_chart(fig, width="stretch")
         else:
-            daily = f.groupby("sales_date").agg(
-                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+            daily = f.groupby("sales_date").agg(Val=(_val_col, "sum")).reset_index()
             fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=daily["sales_date"], y=daily["Revenue"], mode="lines",
+                x=daily["sales_date"], y=daily["Val"], mode="lines",
                 line=dict(color=ACCENT, width=3, shape="spline"),
                 fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
-                hovertemplate="<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>",
-                name="Revenue"))
+                hovertemplate=f"<b>%{{x|%a %b %d}}</b><br>{_hover_fmt}<extra></extra>",
+                name=ov_metric))
             if len(daily) > 3:
-                daily["MA"] = daily["Revenue"].rolling(min(7, len(daily)), min_periods=1).mean()
+                daily["MA"] = daily["Val"].rolling(min(7, len(daily)), min_periods=1).mean()
+                _ma_hover = "Moving Avg: $%{y:,.2f}" if _is_rev else "Moving Avg: %{y:,.0f}"
                 fig.add_trace(go.Scatter(
                     x=daily["sales_date"], y=daily["MA"], mode="lines",
                     line=dict(color=ACCENT2, width=2, dash="dot"),
-                    hovertemplate="Moving Avg: $%{y:,.2f}<extra></extra>", name="Moving Avg"))
-            fig.update_layout(**CL, title="Daily Revenue Trend", height=380,
+                    hovertemplate=f"{_ma_hover}<extra></extra>", name="Moving Avg"))
+            fig.update_layout(**CL, title=f"Daily {ov_metric} Trend", height=380,
                               legend=dict(orientation="h", y=1.12))
             fig.update_xaxes(gridcolor=GRID)
             fig.update_yaxes(gridcolor=GRID)
             st.plotly_chart(fig, width="stretch")
 
     with c2:
-        loc_rev = (f.groupby("outlet")["net_sales"].sum().reset_index()
-                   .sort_values("net_sales", ascending=False))
+        loc_data = (f.groupby("outlet")[_val_col].sum().reset_index()
+                    .sort_values(_val_col, ascending=False))
+        _pie_total = loc_data[_val_col].sum()
+        _pie_hover = "$%{value:,.2f}" if _is_rev else "%{value:,.0f} units"
         fig_d = go.Figure(go.Pie(
-            labels=loc_rev["outlet"], values=loc_rev["net_sales"], hole=0.55,
-            textposition="outside", textinfo="label+percent",
-            marker=dict(colors=[LOCATION_COLORS.get(l, "#ccc") for l in loc_rev["outlet"]]),
-            hovertemplate="<b>%{label}</b><br>$%{value:,.2f}<br>%{percent}<extra></extra>",
-            pull=[0.03] * len(loc_rev)))
-        fig_d.update_layout(**CL, title="Revenue by Outlet", height=380, showlegend=False)
+            labels=loc_data["outlet"], values=loc_data[_val_col], hole=0.55,
+            textposition="inside", textinfo="percent",
+            marker=dict(colors=[LOCATION_COLORS.get(l, "#ccc") for l in loc_data["outlet"]]),
+            hovertemplate=f"<b>%{{label}}</b><br>{_pie_hover}<br>%{{percent}}<extra></extra>",
+            pull=[0.03] * len(loc_data)))
+        fig_d.update_layout(**CL, title=f"{ov_metric} by Outlet", height=400,
+                            showlegend=True, legend=dict(orientation="h", y=-0.15,
+                            x=0.5, xanchor="center", font=dict(size=10)))
+        _center_text = f"<b>{_fmt(_pie_total)}</b>"
         fig_d.add_annotation(
-            text=f"<b>${net:,.0f}</b><br><span style='font-size:11px;color:#888'>Net</span>",
+            text=_center_text,
             x=0.5, y=0.5, font_size=18, font_color=TEXT_COLOR, showarrow=False)
         st.plotly_chart(fig_d, width="stretch")
 
@@ -805,55 +795,54 @@ with tab1:
     with c3:
         cat_data = (f.groupby("menu_category").agg(
             Revenue=("net_sales", "sum"), Units=("primary_units", "sum"))
-            .reset_index().sort_values("Revenue", ascending=False))
+            .reset_index().sort_values("Revenue" if _is_rev else "Units", ascending=False))
+        _cat_y = cat_data["Revenue"] if _is_rev else cat_data["Units"]
+        _cat_text = [_fmt(v) for v in _cat_y]
+        _cat_hover = "$%{y:,.2f}" if _is_rev else "%{y:,.0f} units"
         fig_cat = go.Figure(go.Bar(
-            x=cat_data["menu_category"], y=cat_data["Revenue"],
-            marker=dict(color=cat_data["Revenue"],
+            x=cat_data["menu_category"], y=_cat_y,
+            marker=dict(color=_cat_y,
                         colorscale=[[0, PAL[2]], [0.5, PAL[0]], [1, PAL[9]]]),
-            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(cat_data["Revenue"], cat_data["Units"])],
-            textposition="outside", textfont=dict(size=10),
-            hovertemplate="<b>%{x}</b><br>$%{y:,.2f}<extra></extra>"))
-        fig_cat.update_layout(**CL, title="Revenue by Category ($ & units)", height=400)
+            text=_cat_text, textposition="outside", textfont=dict(size=10),
+            hovertemplate=f"<b>%{{x}}</b><br>{_cat_hover}<extra></extra>"))
+        fig_cat.update_layout(**CL, title=f"{ov_metric} by Category", height=400)
         fig_cat.update_xaxes(tickangle=-30, gridcolor=GRID)
         fig_cat.update_yaxes(gridcolor=GRID)
         st.plotly_chart(fig_cat, width="stretch")
 
     with c4:
+        _sort_col = "net_sales" if _is_rev else "units"
         top10 = (f.groupby("product").agg(
             net_sales=("net_sales", "sum"), units=("primary_units", "sum"))
-            .nlargest(10, "net_sales").sort_values("net_sales"))
+            .nlargest(10, _sort_col).sort_values(_sort_col))
+        _t10_x = top10["net_sales"] if _is_rev else top10["units"]
+        _t10_text = [_fmt(v) for v in _t10_x]
+        _t10_hover = "$%{x:,.2f}" if _is_rev else "%{x:,.0f} units"
         fig_t = go.Figure(go.Bar(
-            x=top10["net_sales"], y=top10.index, orientation="h",
-            marker=dict(color=top10["net_sales"],
+            x=_t10_x, y=top10.index, orientation="h",
+            marker=dict(color=_t10_x,
                         colorscale=[[0, PAL[2]], [0.5, PAL[0]], [1, PAL[9]]]),
-            text=[f"${v:,.0f} ({u:,.0f})" for v, u in zip(top10["net_sales"], top10["units"])],
-            textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
-            hovertemplate="<b>%{y}</b><br>$%{x:,.2f}<extra></extra>"))
-        fig_t.update_layout(**CL, title="Top 10 Products ($ & units)", height=400)
+            text=_t10_text, textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
+            hovertemplate=f"<b>%{{y}}</b><br>{_t10_hover}<extra></extra>"))
+        fig_t.update_layout(**CL, title=f"Top 10 Products ({ov_metric})", height=400)
         fig_t.update_xaxes(visible=False)
         fig_t.update_yaxes(gridcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig_t, width="stretch")
 
     # ── Product x Day Heatmap ────────────────────────────────────────────────
-    _phm1, _phm2 = st.columns([4, 1])
-    with _phm1:
-        st.markdown('<p class="sec-title">Product Sales Heatmap (Top 15 by Day)</p>',
-                    unsafe_allow_html=True)
-    with _phm2:
-        phm_metric = st.radio("Show", ["Revenue", "Units"], horizontal=True,
-                              label_visibility="collapsed", key="phm_metric")
-    _phm_col = "net_sales" if phm_metric == "Revenue" else "primary_units"
-    top_prods = f.groupby("product")[_phm_col].sum().nlargest(15).index.tolist()
+    st.markdown(f'<p class="sec-title">Product {ov_metric} Heatmap (Top 15 by Day)</p>',
+                unsafe_allow_html=True)
+    top_prods = f.groupby("product")[_val_col].sum().nlargest(15).index.tolist()
     hm_data = f[f["product"].isin(top_prods)].groupby(
-        ["product", "day_of_week"])[_phm_col].sum().reset_index()
+        ["product", "day_of_week"])[_val_col].sum().reset_index()
     hm_piv = hm_data.pivot_table(index="product", columns="day_of_week",
-                                  values=_phm_col, fill_value=0)
+                                  values=_val_col, fill_value=0)
     dow_order_hm = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     hm_piv = hm_piv.reindex(columns=[d for d in dow_order_hm if d in hm_piv.columns])
     hm_piv = hm_piv.loc[hm_piv.sum(axis=1).sort_values(ascending=True).index]
 
-    _phm_fmt = "$%{z:,.0f}" if phm_metric == "Revenue" else "%{z:,.0f}"
-    _phm_hover = "$%{z:,.2f}" if phm_metric == "Revenue" else "%{z:,.0f} units"
+    _phm_fmt = "$%{z:,.0f}" if _is_rev else "%{z:,.0f}"
+    _phm_hover = "$%{z:,.2f}" if _is_rev else "%{z:,.0f} units"
     fig_phm = go.Figure(go.Heatmap(
         z=hm_piv.values, x=hm_piv.columns.tolist(), y=hm_piv.index.tolist(),
         colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
