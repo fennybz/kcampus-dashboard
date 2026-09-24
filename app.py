@@ -397,49 +397,76 @@ if has_data:
     primary["semester"] = primary["sales_date"].apply(get_semester)
 
     # ── FILTER BAR ───────────────────────────────────────────────────────────
+    _dmin = primary["sales_date"].min().date()
+    _dmax = primary["sales_date"].max().date()
+
     st.markdown('<div class="filter-strip">', unsafe_allow_html=True)
-    fc0, fc1, fc2, fc3, fc4, fc5 = st.columns([2.5, 2, 2, 1.5, 1.5, 2])
+    # Order: Date → Semester → Outlet → Category → Product (broad → specific)
+    fc0, fc1, fc2, fc3, fc4 = st.columns([3, 1.5, 2, 2, 2])
     with fc0:
         st.markdown('<div class="filter-label">Date Range</div>', unsafe_allow_html=True)
-        _dmin = primary["sales_date"].min().date()
-        _dmax = primary["sales_date"].max().date()
         sel_dates = st.date_input("Date Range", value=(_dmin, _dmax), min_value=_dmin,
                                   max_value=_dmax, label_visibility="collapsed")
         if isinstance(sel_dates, (list, tuple)) and len(sel_dates) == 2:
             _date_start, _date_end = sel_dates
         else:
             _date_start, _date_end = _dmin, _dmax
+        # Quick presets
+        _qp1, _qp2, _qp3, _qp4 = st.columns(4)
+        with _qp1:
+            if st.button("Last 7d", use_container_width=True, key="qp7"):
+                st.session_state["date_preset"] = 7
+                st.rerun()
+        with _qp2:
+            if st.button("Last 14d", use_container_width=True, key="qp14"):
+                st.session_state["date_preset"] = 14
+                st.rerun()
+        with _qp3:
+            if st.button("Last 30d", use_container_width=True, key="qp30"):
+                st.session_state["date_preset"] = 30
+                st.rerun()
+        with _qp4:
+            if st.button("All", use_container_width=True, key="qpall"):
+                st.session_state.pop("date_preset", None)
+                st.rerun()
+        # Apply preset if active
+        if "date_preset" in st.session_state:
+            _date_start = max(_dmin, _dmax - pd.Timedelta(days=st.session_state["date_preset"] - 1))
+            _date_end = _dmax
     with fc1:
-        st.markdown('<div class="filter-label">Outlet</div>', unsafe_allow_html=True)
-        outlets = sorted(primary["outlet"].dropna().unique())
-        sel_outlets = st.multiselect("Outlet", outlets, default=[],
-                                     placeholder="All Outlets", label_visibility="collapsed")
-    with fc2:
-        st.markdown('<div class="filter-label">Menu Category</div>', unsafe_allow_html=True)
-        categories = sorted([c for c in primary["menu_category"].dropna().unique() if c.strip()])
-        sel_cats = st.multiselect("Category", categories, default=[],
-                                  placeholder="All Categories", label_visibility="collapsed")
-    with fc3:
         st.markdown('<div class="filter-label">Semester</div>', unsafe_allow_html=True)
         semesters = sorted(primary["semester"].unique(), key=lambda x: ["Spring","Summer","Fall"].index(x) if x in ["Spring","Summer","Fall"] else 0)
         sel_sem = st.multiselect("Semester", semesters, default=[],
                                  placeholder="All", label_visibility="collapsed")
+    with fc2:
+        st.markdown('<div class="filter-label">Outlet</div>', unsafe_allow_html=True)
+        outlets = sorted(primary["outlet"].dropna().unique())
+        sel_outlets = st.multiselect("Outlet", outlets, default=[],
+                                     placeholder="All Outlets", label_visibility="collapsed")
+    with fc3:
+        st.markdown('<div class="filter-label">Category</div>', unsafe_allow_html=True)
+        categories = sorted([c for c in primary["menu_category"].dropna().unique() if c.strip()])
+        sel_cats = st.multiselect("Category", categories, default=[],
+                                  placeholder="All Categories", label_visibility="collapsed")
     with fc4:
-        st.markdown('<div class="filter-label">Recent</div>', unsafe_allow_html=True)
-        _recent_opts = ["All Time", "Last 1 Week", "Last 2 Weeks", "Last 4 Weeks", "Last 8 Weeks"]
-        sel_recent = st.selectbox("Recent", _recent_opts, index=0, label_visibility="collapsed")
-    with fc5:
         st.markdown('<div class="filter-label">Product</div>', unsafe_allow_html=True)
-        products = sorted(primary["product"].dropna().unique())
+        # Filter products based on selected categories
+        if sel_cats:
+            products = sorted(primary[primary["menu_category"].isin(sel_cats)]["product"].dropna().unique())
+        else:
+            products = sorted(primary["product"].dropna().unique())
         sel_products = st.multiselect("Product", products, default=[],
                                       placeholder="All Products", label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Compute recent weeks cutoff
-    if sel_recent != "All Time":
-        _n_weeks = int(sel_recent.split()[1])
-        _recent_cutoff = _dmax - pd.Timedelta(weeks=_n_weeks)
-        _date_start = max(_date_start, _recent_cutoff)
+    # Show active date range
+    _ds_fmt = _date_start.strftime("%b %d, %Y")
+    _de_fmt = _date_end.strftime("%b %d, %Y")
+    _n_days = (_date_end - _date_start).days + 1
+    st.markdown(f'<div style="text-align:center;padding:0.3rem 0;font-size:0.8rem;color:#888;">'
+                f'Showing <b style="color:{ACCENT};">{_ds_fmt}</b> to '
+                f'<b style="color:{ACCENT};">{_de_fmt}</b> ({_n_days} days)</div>',
+                unsafe_allow_html=True)
 
     # Apply filters
     mask = (primary["outlet"].isin(sel_outlets if sel_outlets else outlets)
@@ -680,53 +707,66 @@ if f.empty:
 # TAB 1: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    # View toggle
-    _vt1, _vt2 = st.columns([3, 1])
-    with _vt2:
-        trend_view = st.radio("Trend view", ["Daily", "Weekly"], horizontal=True,
+    _tv1, _tv2 = st.columns([4, 1])
+    with _tv2:
+        trend_view = st.radio("View", ["Daily", "Weekly"], horizontal=True,
                               label_visibility="collapsed", key="trend_view")
     c1, c2 = st.columns([3, 2])
     with c1:
         if trend_view == "Weekly":
             _wk = f.copy()
             _wk["_week"] = _wk["sales_date"].dt.to_period("W")
-            trend_data = _wk.groupby("_week").agg(
+            wk_trend = _wk.groupby("_week").agg(
                 Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
-            trend_data["_x"] = trend_data["_week"].apply(lambda p: p.start_time)
-            trend_data["_label"] = trend_data["_week"].apply(
-                lambda p: f"{p.start_time.strftime('%b %d')} – {p.end_time.strftime('%b %d')}")
-            x_vals = trend_data["_x"]
-            hover_tpl = "<b>%{customdata[0]}</b><br>$%{y:,.2f}<extra></extra>"
-            custom_data = trend_data[["_label"]].values
-            chart_title = "Weekly Revenue Trend"
-        else:
-            trend_data = f.groupby("sales_date").agg(
-                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
-            x_vals = trend_data["sales_date"]
-            hover_tpl = "<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>"
-            custom_data = None
-            chart_title = "Daily Revenue Trend"
-
-        fig = go.Figure()
-        _scatter_kw = dict(
-            x=x_vals, y=trend_data["Revenue"], mode="lines",
-            line=dict(color=ACCENT, width=3, shape="spline"),
-            fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
-            hovertemplate=hover_tpl, name="Revenue")
-        if custom_data is not None:
-            _scatter_kw["customdata"] = custom_data
-        fig.add_trace(go.Scatter(**_scatter_kw))
-        if len(trend_data) > 3:
-            trend_data["MA"] = trend_data["Revenue"].rolling(min(7, len(trend_data)), min_periods=1).mean()
+            wk_trend["_label"] = wk_trend["_week"].apply(
+                lambda p: f"{p.start_time.strftime('%b %d')} \u2013 {p.end_time.strftime('%b %d')}")
+            wk_trend["_x"] = wk_trend["_week"].apply(lambda p: p.start_time)
+            fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=x_vals, y=trend_data["MA"], mode="lines",
-                line=dict(color=ACCENT2, width=2, dash="dot"),
-                hovertemplate="Moving Avg: $%{y:,.2f}<extra></extra>", name="Moving Avg"))
-        fig.update_layout(**CL, title=chart_title, height=380,
-                          legend=dict(orientation="h", y=1.12))
-        fig.update_xaxes(gridcolor=GRID)
-        fig.update_yaxes(gridcolor=GRID)
-        st.plotly_chart(fig, width="stretch")
+                x=wk_trend["_x"], y=wk_trend["Revenue"], mode="lines+markers",
+                line=dict(color=ACCENT, width=3, shape="spline"),
+                marker=dict(size=10, color=ACCENT),
+                fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
+                customdata=wk_trend[["_label"]].values,
+                hovertemplate="<b>%{customdata[0]}</b><br>$%{y:,.2f}<extra></extra>",
+                name="Revenue"))
+            # % change annotations
+            for i in range(1, len(wk_trend)):
+                prev = wk_trend.iloc[i - 1]["Revenue"]
+                curr = wk_trend.iloc[i]["Revenue"]
+                if prev > 0:
+                    pct = (curr - prev) / prev * 100
+                    color = "#22c55e" if pct >= 0 else "#ef4444"
+                    fig.add_annotation(
+                        x=wk_trend.iloc[i]["_x"], y=curr * 1.08,
+                        text=f"{'+'if pct>=0 else ''}{pct:.1f}%",
+                        showarrow=False, font=dict(size=11, color=color, weight="bold"))
+            fig.update_layout(**CL, title="Weekly Revenue Trend", height=380,
+                              legend=dict(orientation="h", y=1.12))
+            fig.update_xaxes(gridcolor=GRID)
+            fig.update_yaxes(gridcolor=GRID)
+            st.plotly_chart(fig, width="stretch")
+        else:
+            daily = f.groupby("sales_date").agg(
+                Revenue=("net_sales", "sum"), Units=("primary_units", "sum")).reset_index()
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=daily["sales_date"], y=daily["Revenue"], mode="lines",
+                line=dict(color=ACCENT, width=3, shape="spline"),
+                fill="tozeroy", fillcolor="rgba(233,69,96,0.06)",
+                hovertemplate="<b>%{x|%a %b %d}</b><br>$%{y:,.2f}<extra></extra>",
+                name="Revenue"))
+            if len(daily) > 3:
+                daily["MA"] = daily["Revenue"].rolling(min(7, len(daily)), min_periods=1).mean()
+                fig.add_trace(go.Scatter(
+                    x=daily["sales_date"], y=daily["MA"], mode="lines",
+                    line=dict(color=ACCENT2, width=2, dash="dot"),
+                    hovertemplate="Moving Avg: $%{y:,.2f}<extra></extra>", name="Moving Avg"))
+            fig.update_layout(**CL, title="Daily Revenue Trend", height=380,
+                              legend=dict(orientation="h", y=1.12))
+            fig.update_xaxes(gridcolor=GRID)
+            fig.update_yaxes(gridcolor=GRID)
+            st.plotly_chart(fig, width="stretch")
 
     with c2:
         loc_rev = (f.groupby("outlet")["net_sales"].sum().reset_index()
