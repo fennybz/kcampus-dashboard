@@ -835,26 +835,33 @@ with tab1:
         st.plotly_chart(fig_t, width="stretch")
 
     # ── Product x Day Heatmap ────────────────────────────────────────────────
-    st.markdown('<p class="sec-title">Product Sales Heatmap (Top 15 by Day)</p>',
-                unsafe_allow_html=True)
-    top_prods = f.groupby("product")["net_sales"].sum().nlargest(15).index.tolist()
+    _phm1, _phm2 = st.columns([4, 1])
+    with _phm1:
+        st.markdown('<p class="sec-title">Product Sales Heatmap (Top 15 by Day)</p>',
+                    unsafe_allow_html=True)
+    with _phm2:
+        phm_metric = st.radio("Show", ["Revenue", "Units"], horizontal=True,
+                              label_visibility="collapsed", key="phm_metric")
+    _phm_col = "net_sales" if phm_metric == "Revenue" else "primary_units"
+    top_prods = f.groupby("product")[_phm_col].sum().nlargest(15).index.tolist()
     hm_data = f[f["product"].isin(top_prods)].groupby(
-        ["product", "day_of_week"])["net_sales"].sum().reset_index()
+        ["product", "day_of_week"])[_phm_col].sum().reset_index()
     hm_piv = hm_data.pivot_table(index="product", columns="day_of_week",
-                                  values="net_sales", fill_value=0)
+                                  values=_phm_col, fill_value=0)
     dow_order_hm = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     hm_piv = hm_piv.reindex(columns=[d for d in dow_order_hm if d in hm_piv.columns])
-    # Sort products by total revenue descending
     hm_piv = hm_piv.loc[hm_piv.sum(axis=1).sort_values(ascending=True).index]
 
+    _phm_fmt = "$%{z:,.0f}" if phm_metric == "Revenue" else "%{z:,.0f}"
+    _phm_hover = "$%{z:,.2f}" if phm_metric == "Revenue" else "%{z:,.0f} units"
     fig_phm = go.Figure(go.Heatmap(
         z=hm_piv.values, x=hm_piv.columns.tolist(), y=hm_piv.index.tolist(),
         colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
                     [0.25, PAL[5]+"55"],
                     [0.5, PAL[0]],
                     [1, PAL[1]]],
-        hovertemplate="<b>%{y}</b><br>%{x}: $%{z:,.2f}<extra></extra>",
-        texttemplate="$%{z:,.0f}", textfont=dict(size=10)))
+        hovertemplate=f"<b>%{{y}}</b><br>%{{x}}: {_phm_hover}<extra></extra>",
+        texttemplate=_phm_fmt, textfont=dict(size=10)))
     fig_phm.update_layout(**CL, height=max(350, len(top_prods) * 28 + 80),
                            title="When does each product sell best?")
     st.plotly_chart(fig_phm, width="stretch")
@@ -1351,19 +1358,27 @@ with tab3:
         st.plotly_chart(fig_dow_u, width="stretch")
 
     # Heatmap
-    st.markdown('<p class="sec-title">Revenue Heatmap: Day x Outlet</p>',
-                unsafe_allow_html=True)
+    _hm1, _hm2 = st.columns([4, 1])
+    with _hm1:
+        st.markdown('<p class="sec-title">Heatmap: Day x Outlet</p>',
+                    unsafe_allow_html=True)
+    with _hm2:
+        hm_metric = st.radio("Show", ["Revenue", "Units"], horizontal=True,
+                             label_visibility="collapsed", key="hm_metric")
+    _hm_val = "net_sales" if hm_metric == "Revenue" else "primary_units"
     do = f.groupby(["day_of_week", "outlet"]).agg(
-        Rev=("net_sales", "sum"), Days=("sales_date", "nunique")).reset_index()
-    do["Avg"] = do["Rev"] / do["Days"]
+        Val=(_hm_val, "sum"), Days=("sales_date", "nunique")).reset_index()
+    do["Avg"] = do["Val"] / do["Days"]
     piv = do.pivot_table(index="outlet", columns="day_of_week", values="Avg", fill_value=0)
     piv = piv.reindex(columns=[d for d in dow_order if d in piv.columns])
+    _hm_fmt = "$%{z:,.0f}" if hm_metric == "Revenue" else "%{z:,.0f}"
+    _hm_hover = "$%{z:,.2f}/day" if hm_metric == "Revenue" else "%{z:,.0f} units/day"
     fig_hm = go.Figure(go.Heatmap(
         z=piv.values, x=piv.columns.tolist(), y=piv.index.tolist(),
         colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"], [0.3, PAL[5]+"55"],
                     [0.6, PAL[0]], [1, PAL[1]]],
-        hovertemplate="<b>%{y}</b><br>%{x}: $%{z:,.2f}/day<extra></extra>",
-        texttemplate="$%{z:,.0f}", textfont=dict(size=11, color=TEXT_COLOR)))
+        hovertemplate=f"<b>%{{y}}</b><br>%{{x}}: {_hm_hover}<extra></extra>",
+        texttemplate=_hm_fmt, textfont=dict(size=11, color=TEXT_COLOR)))
     fig_hm.update_layout(**CL, title="Which outlets peak on which days?", height=350)
     st.plotly_chart(fig_hm, width="stretch")
 
