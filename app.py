@@ -50,21 +50,26 @@ st.markdown("""
     /* Header bar */
     .hero {
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
-        padding: 1.2rem 2.5rem; border-radius: 0 0 1.2rem 1.2rem;
-        margin: -0.5rem -1rem 0.8rem -1rem;
-        display: flex; align-items: center; gap: 1.5rem;
+        padding: 0.6rem 1.5rem; border-radius: 0 0 1rem 1rem;
+        margin: -0.5rem -1rem 0.4rem -1rem;
+        display: flex; align-items: center; gap: 1rem;
     }
-    .hero h1 { color: #ffffff; font-size: 1.8rem; margin: 0; font-weight: 800;
+    .hero h1 { color: #ffffff; font-size: 1.4rem; margin: 0; font-weight: 800;
                background: linear-gradient(90deg, #ff6b6b, #e94560, #ff8a80);
                -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .hero .subtitle { color: #a8b2d1; font-size: 0.9rem; margin: 0.2rem 0 0 0; }
-    .hero .date-badge { margin-left: auto; background: rgba(233,69,96,0.15);
-        color: #ff6b6b; padding: 0.4rem 1rem; border-radius: 2rem;
-        font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+    .hero .subtitle { color: #a8b2d1; font-size: 0.78rem; margin: 0.1rem 0 0 0; }
+    .hero .date-badge { background: rgba(233,69,96,0.15);
+        color: #ff6b6b; padding: 0.25rem 0.8rem; border-radius: 2rem;
+        font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+    .hero .controls { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+    .hero .theme-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+        color: #a8b2d1; padding: 0.25rem 0.6rem; border-radius: 0.4rem; cursor: pointer;
+        font-size: 0.72rem; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
+    .hero .theme-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
 
     /* KPI row */
-    .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.8rem;
-               margin: 0 0 0.6rem 0; }
+    .kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.6rem;
+               margin: 0 0 0.4rem 0; }
     .kpi-card { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px);
         border: 1px solid rgba(238,240,246,0.8); border-radius: 1rem;
         padding: 1rem 1.2rem; position: relative; overflow: hidden;
@@ -79,9 +84,28 @@ st.markdown("""
     /* Filter bar */
     .filter-strip { background: rgba(248,249,255,0.8); backdrop-filter: blur(10px);
         border: 1px solid rgba(238,240,246,0.6); border-radius: 0.8rem;
-        padding: 0.6rem 1.2rem 0.2rem 1.2rem; margin-bottom: 0.6rem; }
-    .filter-label { font-size: 0.7rem; color: #8892b0; text-transform: uppercase;
-        letter-spacing: 1.2px; font-weight: 700; margin-bottom: 0.15rem; }
+        padding: 0.4rem 1rem 0.1rem 1rem; margin-bottom: 0.3rem; }
+    .filter-label { font-size: 0.65rem; color: #8892b0; text-transform: uppercase;
+        letter-spacing: 1.2px; font-weight: 700; margin-bottom: 0.1rem; }
+    .filter-strip .stDateInput, .filter-strip .stMultiSelect,
+    .filter-strip .stSelectbox { margin-bottom: -0.5rem; }
+    .date-range-info { text-align: center; font-size: 0.7rem; color: #888;
+        padding: 0.15rem 0; margin-bottom: 0.2rem; }
+    /* Compact spacing inside filter strip */
+    .filter-strip [data-testid="stVerticalBlock"] { gap: 0.15rem !important; }
+    /* Compact date pills */
+    .filter-strip [data-testid="stPills"] { margin-top: -0.3rem; }
+    .filter-strip [data-testid="stPills"] button {
+        padding: 0.1rem 0.5rem !important; font-size: 0.65rem !important;
+        min-height: 1.4rem !important; border-radius: 1rem !important; }
+    /* Icon buttons in filter strip */
+    .filter-strip .stButton > button {
+        font-size: 1.4rem !important; padding: 0.2rem 0 !important;
+        min-height: 2.2rem !important; line-height: 1 !important;
+        border-radius: 0.6rem !important; }
+    /* Reduce Streamlit default element gaps globally */
+    .block-container [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"]:first-child {
+        margin-top: 0 !important; }
 
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] { gap: 0.3rem; background: rgba(248,249,255,0.7);
@@ -148,13 +172,14 @@ st.markdown("""
         letter-spacing: 1px; margin-top: 0.2rem; }
 
     /* Logo styling */
-    .hero img { height: 80px; border-radius: 12px; border: 2px solid rgba(233,69,96,0.4); }
+    .hero img { height: 52px; border-radius: 10px; border: 2px solid rgba(233,69,96,0.4); }
 
     /* ── Mobile responsive ─────────────────────────────────── */
     @media (max-width: 768px) {
-        .hero { flex-wrap: wrap; padding: 1rem; gap: 0.8rem; justify-content: center; text-align: center; }
-        .hero img { height: 50px; }
-        .hero h1 { font-size: 1.3rem; }
+        .hero { flex-wrap: wrap; padding: 0.5rem 0.8rem; gap: 0.5rem; justify-content: center; text-align: center; }
+        .hero img { height: 40px; }
+        .hero h1 { font-size: 1.1rem; }
+        .hero .controls { margin-left: 0; justify-content: center; }
         .hero .subtitle { font-size: 0.75rem; }
         .hero .date-badge { margin-left: 0; margin-top: 0.3rem; }
         .kpi-row { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
@@ -347,32 +372,20 @@ if os.path.exists(logo_path):
         logo_b64 = base64.b64encode(lf.read()).decode()
 logo_html = f'<img src="data:image/avif;base64,{logo_b64}">' if logo_b64 else ""
 
-today_str = datetime.now().strftime("%B %d, %Y")
+today_str = datetime.now().strftime("%b %d, %Y")
 st.markdown(f"""
 <div class="hero">
     {logo_html}
     <div style="flex:1;min-width:0;">
         <h1>Kalachandji's Campus Sales</h1>
-        <p class="subtitle">University of Texas at Dallas &mdash; Real-time menu decisions, peak analysis &amp; outlet performance</p>
+        <p class="subtitle">UT Dallas &mdash; Menu decisions, peak analysis &amp; outlet performance</p>
     </div>
-    <div class="date-badge">{today_str}</div>
+    <div class="controls">
+        <div class="date-badge">{today_str}</div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Theme toggle + palette selector
-tc1, tc2, tc3 = st.columns([10, 1.5, 1])
-with tc2:
-    pal_choice = st.selectbox("Palette", list(PALETTES.keys()),
-                              index=list(PALETTES.keys()).index(st.session_state.palette),
-                              label_visibility="collapsed", key="pal_sel")
-    if pal_choice != st.session_state.palette:
-        st.session_state.palette = pal_choice
-        st.rerun()
-with tc3:
-    toggle_label = "☀ Light" if dark else "🌙 Dark"
-    if st.button(toggle_label, key="theme_toggle", type="tertiary"):
-        st.session_state.dark_mode = not dark
-        st.rerun()
 
 # ── Load Data ────────────────────────────────────────────────────────────────
 df_all = get_all_sales()
@@ -402,7 +415,7 @@ if has_data:
 
     st.markdown('<div class="filter-strip">', unsafe_allow_html=True)
     # Order: Date → Semester → Outlet → Category → Product (broad → specific)
-    fc0, fc1, fc2, fc3, fc4 = st.columns([3, 1.5, 2, 2, 2])
+    fc0, fc1, fc2, fc3, fc4, fc5, fc6 = st.columns([2.5, 1.2, 1.8, 1.8, 1.8, 0.45, 0.45])
     with fc0:
         st.markdown('<div class="filter-label">Date Range</div>', unsafe_allow_html=True)
         sel_dates = st.date_input("Date Range", value=(_dmin, _dmax), min_value=_dmin,
@@ -411,25 +424,18 @@ if has_data:
             _date_start, _date_end = sel_dates
         else:
             _date_start, _date_end = _dmin, _dmax
-        # Quick presets
-        _qp1, _qp2, _qp3, _qp4 = st.columns(4)
-        with _qp1:
-            if st.button("Last 7d", use_container_width=True, key="qp7"):
-                st.session_state["date_preset"] = 7
-                st.rerun()
-        with _qp2:
-            if st.button("Last 14d", use_container_width=True, key="qp14"):
-                st.session_state["date_preset"] = 14
-                st.rerun()
-        with _qp3:
-            if st.button("Last 30d", use_container_width=True, key="qp30"):
-                st.session_state["date_preset"] = 30
-                st.rerun()
-        with _qp4:
-            if st.button("All", use_container_width=True, key="qpall"):
+        # Compact pill presets
+        _preset_map = {"7d": 7, "14d": 14, "30d": 30, "All": None}
+        _cur = st.session_state.get("date_preset", None)
+        _default = next((k for k, v in _preset_map.items() if v == _cur), "All")
+        _pick = st.pills("Quick", list(_preset_map.keys()), default=_default,
+                         label_visibility="collapsed", key="date_pills")
+        if _pick and _pick != _default:
+            if _preset_map[_pick] is None:
                 st.session_state.pop("date_preset", None)
-                st.rerun()
-        # Apply preset if active
+            else:
+                st.session_state["date_preset"] = _preset_map[_pick]
+            st.rerun()
         if "date_preset" in st.session_state:
             _date_start = max(_dmin, _dmax - pd.Timedelta(days=st.session_state["date_preset"] - 1))
             _date_end = _dmax
@@ -450,22 +456,34 @@ if has_data:
                                   placeholder="All Categories", label_visibility="collapsed")
     with fc4:
         st.markdown('<div class="filter-label">Product</div>', unsafe_allow_html=True)
-        # Filter products based on selected categories
         if sel_cats:
             products = sorted(primary[primary["menu_category"].isin(sel_cats)]["product"].dropna().unique())
         else:
             products = sorted(primary["product"].dropna().unique())
         sel_products = st.multiselect("Product", products, default=[],
                                       placeholder="All Products", label_visibility="collapsed")
+    with fc5:
+        _pal_names = list(PALETTES.keys())
+        _cur_idx = _pal_names.index(st.session_state.palette)
+        st.markdown('<div class="filter-label">&nbsp;</div>', unsafe_allow_html=True)
+        if st.button("🎨", key="pal_cycle", use_container_width=True,
+                     help=f"Palette: {st.session_state.palette}"):
+            st.session_state.palette = _pal_names[(_cur_idx + 1) % len(_pal_names)]
+            st.rerun()
+    with fc6:
+        st.markdown('<div class="filter-label">&nbsp;</div>', unsafe_allow_html=True)
+        if st.button("☀️" if dark else "🌓", key="theme_toggle", use_container_width=True):
+            st.session_state.dark_mode = not dark
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Show active date range
-    _ds_fmt = _date_start.strftime("%b %d, %Y")
+    # Compact date range indicator
+    _ds_fmt = _date_start.strftime("%b %d")
     _de_fmt = _date_end.strftime("%b %d, %Y")
     _n_days = (_date_end - _date_start).days + 1
-    st.markdown(f'<div style="text-align:center;padding:0.3rem 0;font-size:0.8rem;color:#888;">'
-                f'Showing <b style="color:{ACCENT};">{_ds_fmt}</b> to '
-                f'<b style="color:{ACCENT};">{_de_fmt}</b> ({_n_days} days)</div>',
+    st.markdown(f'<div class="date-range-info">'
+                f'<b style="color:{ACCENT};">{_ds_fmt}</b> - '
+                f'<b style="color:{ACCENT};">{_de_fmt}</b> ({_n_days}d)</div>',
                 unsafe_allow_html=True)
 
     # Apply filters
