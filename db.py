@@ -204,17 +204,44 @@ def seed_from_xlsm(xlsm_path):
     return True
 
 
+def _parse_money(val):
+    """Strip $ and whitespace from money strings, return float."""
+    if pd.isna(val):
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    return float(str(val).replace("$", "").replace(",", "").strip() or 0)
+
+
 def parse_campus_excel(uploaded_file, filename):
-    """Parse the weekly campus Excel format into normalized rows."""
-    df = pd.read_excel(uploaded_file, header=None)
+    """Parse the weekly campus Excel/CSV format into normalized rows."""
+    # Reset file position for Streamlit UploadedFile objects
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+    is_csv = str(filename).lower().strip().endswith(".csv")
+    if is_csv:
+        df_raw = pd.read_csv(uploaded_file)
+        # CSV has named headers — map to positional layout matching Excel
+        col_map = ["Order Date", "Time Interval", "Campus", "Venue",
+                   "Category", "Item", "Modifier Group", "Modifier",
+                   "Quantity", "% Quantity", "Sale Price",
+                   "Subtotal Sale Price", "Merchant Discount",
+                   "Total Merchant Sale"]
+        df = pd.DataFrame()
+        for i, name in enumerate(col_map):
+            df[i] = df_raw[name] if name in df_raw.columns else None
+    else:
+        df = pd.read_excel(uploaded_file, header=None)
     rows = []
 
     for _, row in df.iterrows():
-        date_val = row.iloc[0]
-        if not isinstance(date_val, (datetime, pd.Timestamp)):
+        date_val = row.iloc[0] if len(row) > 0 else None
+        try:
+            dt = pd.Timestamp(date_val)
+        except (ValueError, TypeError):
             continue
-
-        dt = pd.Timestamp(date_val)
+        if pd.isna(dt):
+            continue
         location = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
         category = str(row.iloc[4]).strip() if len(row) > 4 and pd.notna(row.iloc[4]) else ""
         parent_item = str(row.iloc[5]).strip() if pd.notna(row.iloc[5]) else ""
@@ -222,15 +249,19 @@ def parse_campus_excel(uploaded_file, filename):
         mod_type = str(row.iloc[6]).strip() if len(row) > 6 and pd.notna(row.iloc[6]) else ""
         # Column H: modifier item name (Tamarind Lemonade, Naan, etc.)
         mod_item = str(row.iloc[7]).strip() if len(row) > 7 and pd.notna(row.iloc[7]) else ""
-        qty = float(row.iloc[8]) if pd.notna(row.iloc[8]) else 0
-        unit_price = float(row.iloc[10]) if pd.notna(row.iloc[10]) else 0
-        total = float(row.iloc[11]) if pd.notna(row.iloc[11]) else 0
-        tax = float(row.iloc[12]) if pd.notna(row.iloc[12]) else 0
-        net = float(row.iloc[13]) if pd.notna(row.iloc[13]) else total
+        qty = _parse_money(row.iloc[8])
+        unit_price = _parse_money(row.iloc[10]) if len(row) > 10 else 0
+        total = _parse_money(row.iloc[11]) if len(row) > 11 else 0
+        discount = _parse_money(row.iloc[12]) if len(row) > 12 else 0
+        net = _parse_money(row.iloc[13]) if len(row) > 13 else total
 
         is_extra = mod_type.lower().startswith("extra") and mod_item
+        # Skip non-extra modifier rows (BYO component selections like Base, Curry picks)
+        is_component = mod_type and not is_extra
 
-        if is_extra:
+        if is_component:
+            continue
+        elif is_extra:
             # Modifier/add-on row: product = extra item, category = "Extras"
             rows.append({
                 "sales_date": dt.strftime("%Y-%m-%d"),
@@ -244,7 +275,7 @@ def parse_campus_excel(uploaded_file, filename):
                 "modifier_selections": 1,
                 "unit_price": unit_price,
                 "gross_sales": total,
-                "discount": total - net if total > net else 0,
+                "discount": discount,
                 "net_sales": net,
             })
         else:
@@ -262,7 +293,7 @@ def parse_campus_excel(uploaded_file, filename):
                 "modifier_selections": 0,
                 "unit_price": unit_price,
                 "gross_sales": total,
-                "discount": total - net if total > net else 0,
+                "discount": discount,
                 "net_sales": net,
             })
 

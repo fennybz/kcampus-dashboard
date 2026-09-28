@@ -587,8 +587,8 @@ with tab5:
 
         with upload_col:
             st.markdown('<p class="sec-title">Upload Weekly Report</p>', unsafe_allow_html=True)
-            st.markdown("Drop the weekly campus Excel file below.")
-            uploaded = st.file_uploader("Upload Excel", type=["xlsx", "xls"], key="uploader",
+            st.markdown("Drop the weekly campus Excel or CSV file below.")
+            uploaded = st.file_uploader("Upload", type=["xlsx", "xls", "csv"], key="uploader",
                                         label_visibility="collapsed")
 
             if uploaded:
@@ -876,6 +876,54 @@ with tab1:
                            title="When does each product sell best?")
     st.plotly_chart(fig_phm, width="stretch")
 
+    # ── Product Sales Lookup ──────────────────────────────────────────────
+    st.markdown('<p class="sec-title">Product Sales Lookup</p>', unsafe_allow_html=True)
+    st.markdown("Select products to see daily sales breakdown across the filtered date range.")
+
+    all_products = sorted(f["product"].unique().tolist())
+    lookup_prods = st.multiselect("Select products", all_products,
+                                   default=all_products[:3] if len(all_products) >= 3 else all_products,
+                                   key="lookup_prods")
+    if lookup_prods:
+        lookup_df = f[f["product"].isin(lookup_prods)].copy()
+        lookup_daily = (lookup_df.groupby(["sales_date", "product"]).agg(
+            units=("primary_units", "sum"), revenue=("net_sales", "sum"))
+            .reset_index().sort_values("sales_date"))
+
+        # Chart: daily units by product
+        fig_lookup = go.Figure()
+        for i, prod in enumerate(lookup_prods):
+            pdata = lookup_daily[lookup_daily["product"] == prod]
+            fig_lookup.add_trace(go.Bar(
+                x=pdata["sales_date"].dt.strftime("%b %d"), y=pdata["units"],
+                name=prod[:30], marker=dict(color=PAL[i % len(PAL)]),
+                hovertemplate=f"<b>{prod[:30]}</b><br>%{{x}}<br>"
+                              f"Units: %{{y:,.0f}}<extra></extra>"))
+        fig_lookup.update_layout(**CL, title="Daily Units by Product", height=400,
+                                  barmode="group",
+                                  legend=dict(orientation="h", y=-0.2, font_size=9))
+        fig_lookup.update_xaxes(gridcolor=GRID)
+        fig_lookup.update_yaxes(gridcolor=GRID, title_text="Units Sold")
+        st.plotly_chart(fig_lookup, width="stretch")
+
+        # Summary table
+        lookup_summary = (lookup_df.groupby("product").agg(
+            total_units=("primary_units", "sum"),
+            total_revenue=("net_sales", "sum"),
+            days_sold=("sales_date", "nunique"),
+            avg_price=("unit_price", "mean")).reset_index())
+        lookup_summary["avg_units_per_day"] = lookup_summary["total_units"] / lookup_summary["days_sold"]
+        lookup_summary["avg_rev_per_day"] = lookup_summary["total_revenue"] / lookup_summary["days_sold"]
+        display_lookup = lookup_summary.copy()
+        display_lookup.columns = ["Product", "Total Units", "Total Revenue",
+                                   "Days Sold", "Avg Price", "Avg Units/Day", "Avg Rev/Day"]
+        display_lookup["Total Revenue"] = display_lookup["Total Revenue"].apply(lambda v: f"${v:,.2f}")
+        display_lookup["Avg Price"] = display_lookup["Avg Price"].apply(lambda v: f"${v:,.2f}")
+        display_lookup["Total Units"] = display_lookup["Total Units"].apply(lambda v: f"{v:,.0f}")
+        display_lookup["Avg Units/Day"] = display_lookup["Avg Units/Day"].apply(lambda v: f"{v:,.1f}")
+        display_lookup["Avg Rev/Day"] = display_lookup["Avg Rev/Day"].apply(lambda v: f"${v:,.2f}")
+        st.dataframe(display_lookup, width="stretch", hide_index=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2: MENU DECISIONS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1023,50 +1071,58 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
 
-        # ── Combo Deep Dive: Co-purchased items & Recommendations ─────────
-        st.markdown('<p class="sec-title">Combo Deep Dive: What Sells With Combos?</p>',
+        # ── Combo Deep Dive ────────────────────────────────────────────────
+        st.markdown('<p class="sec-title">What Customers Actually Add to Combos</p>',
                     unsafe_allow_html=True)
 
-        # ── Real Add-On Data (from Extras in Excel) ───────────────────────
+        # ── Real Add-On Data (from POS Extras) ───────────────────────────
         if not real_extras.empty:
-            st.markdown('<p class="sec-title" style="font-size:0.95rem;">Actual Customer Add-Ons (from POS Extras data)</p>',
-                        unsafe_allow_html=True)
-            rx1, rx2, rx3 = st.columns(3)
+            total_combo_units = combo_df["primary_units"].sum()
+            total_addon_units = real_extras["primary_units"].sum()
+            attach_rate = total_addon_units / total_combo_units * 100 if total_combo_units else 0
+            addon_rev = real_extras["net_sales"].sum()
+            avg_addon = addon_rev / total_addon_units if total_addon_units else 0
+
+            # KPI strip for add-ons
+            panel_bg = 'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'
+            border_c = '#e8e8e8' if not dark else '#30363d'
+            st.markdown(f"""
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;margin:0.3rem 0 0.8rem;">
+                <div style="padding:0.6rem 1rem;background:{panel_bg};border-radius:8px;border:1px solid {border_c};">
+                    <span style="font-size:1.3rem;font-weight:700;color:{PAL[4]};">{attach_rate:.0f}%</span>
+                    <span style="color:{TEXT_COLOR};margin-left:0.4rem;">attach rate</span>
+                </div>
+                <div style="padding:0.6rem 1rem;background:{panel_bg};border-radius:8px;border:1px solid {border_c};">
+                    <span style="font-size:1.3rem;font-weight:700;color:{PAL[0]};">${addon_rev:,.0f}</span>
+                    <span style="color:{TEXT_COLOR};margin-left:0.4rem;">add-on revenue</span>
+                </div>
+                <div style="padding:0.6rem 1rem;background:{panel_bg};border-radius:8px;border:1px solid {border_c};">
+                    <span style="font-size:1.3rem;font-weight:700;color:{PAL[1]};">${avg_addon:,.2f}</span>
+                    <span style="color:{TEXT_COLOR};margin-left:0.4rem;">avg per add-on</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            rx1, rx2 = st.columns(2)
             with rx1:
                 # Most popular add-ons
                 addon_rank = (real_extras.groupby("extra_item").agg(
                     times=("primary_units", "sum"), rev=("net_sales", "sum"))
                     .sort_values("times", ascending=False).reset_index())
                 fig_addon = go.Figure(go.Bar(
-                    x=addon_rank["extra_item"], y=addon_rank["times"],
+                    y=addon_rank["extra_item"], x=addon_rank["times"], orientation="h",
                     marker=dict(color=[PAL[i % len(PAL)] for i in range(len(addon_rank))]),
-                    text=[f"{t:,.0f} times · ${r:,.2f}" for t, r in
+                    text=[f"{t:,.0f}x  (${r:,.2f})" for t, r in
                           zip(addon_rank["times"], addon_rank["rev"])],
                     textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
-                    hovertemplate="<b>%{x}</b><br>%{y:,.0f} add-ons<extra></extra>"))
+                    hovertemplate="<b>%{y}</b><br>Ordered %{x:,.0f} times<extra></extra>"))
                 fig_addon.update_layout(**CL, title="Most Popular Add-Ons", height=300)
-                fig_addon.update_xaxes(gridcolor=GRID)
-                fig_addon.update_yaxes(gridcolor=GRID)
+                fig_addon.update_xaxes(visible=False)
+                fig_addon.update_yaxes(gridcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_addon, width="stretch")
 
             with rx2:
-                # Which parent items get the most add-ons?
-                parent_rank = (real_extras.groupby("parent_item").agg(
-                    addons=("primary_units", "sum"), rev=("net_sales", "sum"))
-                    .sort_values("addons", ascending=False).reset_index())
-                fig_parent = go.Figure(go.Bar(
-                    y=parent_rank["parent_item"], x=parent_rank["addons"], orientation="h",
-                    marker=dict(color=PAL[4]),
-                    text=[f"{a:,.0f} add-ons · ${r:,.2f}" for a, r in
-                          zip(parent_rank["addons"], parent_rank["rev"])],
-                    textposition="outside", textfont=dict(size=10, color=TEXT_COLOR)))
-                fig_parent.update_layout(**CL, title="Items That Get Most Add-Ons", height=300)
-                fig_parent.update_xaxes(visible=False)
-                fig_parent.update_yaxes(gridcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_parent, width="stretch")
-
-            with rx3:
-                # Pairing heatmap: parent × add-on
+                # Pairing heatmap: which add-on goes with which item
                 pair_real = (real_extras.groupby(["parent_item", "extra_item"])["primary_units"]
                              .sum().reset_index())
                 pair_piv_real = pair_real.pivot_table(
@@ -1076,252 +1132,92 @@ with tab2:
                     pair_piv_real.sum(axis=1).sort_values(ascending=True).index]
                 fig_pair_real = go.Figure(go.Heatmap(
                     z=pair_piv_real.values,
-                    x=[c[:18] for c in pair_piv_real.columns.tolist()],
+                    x=[c[:20] for c in pair_piv_real.columns.tolist()],
                     y=pair_piv_real.index.tolist(),
                     colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
                                 [0.3, PAL[5] + "55"], [0.6, PAL[0]], [1, PAL[4]]],
                     hovertemplate="<b>%{y}</b> added to <b>%{x}</b><br>%{z:,.0f} times<extra></extra>",
                     texttemplate="%{z:,.0f}", textfont=dict(size=12)))
-                fig_pair_real.update_layout(**CL, title="Add-On × Item Heatmap",
+                fig_pair_real.update_layout(**CL, title="Add-On Pairings (who adds what to which item)",
                                             height=max(250, len(pair_piv_real) * 40 + 80))
                 st.plotly_chart(fig_pair_real, width="stretch")
 
-            # Add-on attach rate
-            total_combo_units = combo_df["primary_units"].sum()
-            total_addon_units = real_extras["primary_units"].sum()
-            attach_rate = total_addon_units / total_combo_units * 100 if total_combo_units else 0
-            addon_rev = real_extras["net_sales"].sum()
+            # Actionable recommendations
+            top_addon = addon_rank.iloc[0] if len(addon_rank) > 0 else None
+            low_addon = addon_rank.iloc[-1] if len(addon_rank) > 1 else None
+            recs = []
+            if top_addon is not None:
+                recs.append(f'<div class="rec-keep"><b>{top_addon["extra_item"]}</b> is the #1 add-on '
+                            f'({top_addon["times"]:,.0f}x ordered, ${top_addon["rev"]:,.2f} revenue). '
+                            f'Keep it prominent on the menu.</div>')
+            if attach_rate < 30:
+                recs.append(f'<div class="rec-watch"><b>Low attach rate ({attach_rate:.0f}%)</b> — '
+                            f'consider prompting "Add a drink?" at checkout or bundling add-ons at a discount.</div>')
+            elif attach_rate > 50:
+                recs.append(f'<div class="rec-keep"><b>Strong attach rate ({attach_rate:.0f}%)</b> — '
+                            f'customers naturally add extras. Consider a combo deal to formalize this.</div>')
+            if low_addon is not None and low_addon["times"] <= 2:
+                recs.append(f'<div class="rec-drop"><b>{low_addon["extra_item"]}</b> is rarely added '
+                            f'({low_addon["times"]:,.0f}x). Consider replacing or repricing.</div>')
+            for r in recs:
+                st.markdown(r, unsafe_allow_html=True)
+
+        else:
+            st.info("No add-on/extras data available yet. Upload files with Modifier rows to see pairing insights.")
+
+        # ── Combo by Day of Week ──────────────────────────────────────────
+        lt1, lt2 = st.columns(2)
+        with lt1:
+            combo_dow = (combo_df.groupby(["product", "day_of_week"]).agg(
+                units=("primary_units", "sum")).reset_index())
+            dow_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            combo_prods_top = combo_df.groupby("product")["primary_units"].sum().nlargest(5).index.tolist()
+            fig_combo_dow = go.Figure()
+            for i, prod in enumerate(combo_prods_top):
+                pdata = combo_dow[combo_dow["product"] == prod].copy()
+                pdata["day_of_week"] = pd.Categorical(pdata["day_of_week"],
+                                                       categories=dow_order, ordered=True)
+                pdata = pdata.sort_values("day_of_week")
+                fig_combo_dow.add_trace(go.Bar(
+                    x=pdata["day_of_week"], y=pdata["units"], name=prod[:25],
+                    marker=dict(color=PAL[i % len(PAL)]),
+                    hovertemplate=f"<b>{prod[:25]}</b><br>%{{x}}: %{{y:,.0f}} units<extra></extra>"))
+            fig_combo_dow.update_layout(**CL, title="Combo Sales by Day of Week",
+                                        height=350, barmode="group",
+                                        legend=dict(orientation="h", y=-0.25, font_size=9))
+            fig_combo_dow.update_xaxes(gridcolor=GRID)
+            fig_combo_dow.update_yaxes(gridcolor=GRID)
+            st.plotly_chart(fig_combo_dow, width="stretch")
+
+        with lt2:
+            combo_best_day = combo_df.groupby("day_of_week")["net_sales"].sum().sort_values(ascending=False)
+            best_day = combo_best_day.index[0] if not combo_best_day.empty else "N/A"
+            worst_day = combo_best_day.index[-1] if len(combo_best_day) > 1 else "N/A"
+            all_day_count = f["sales_date"].nunique()
+
+            panel_bg = 'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'
+            border_c = '#e8e8e8' if not dark else '#30363d'
             st.markdown(f"""
-            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin:0.5rem 0 1rem;">
-                <div style="padding:0.8rem 1.2rem;background:{'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'};
-                            border-radius:10px;border:1px solid {'#e8e8e8' if not dark else '#30363d'};">
-                    <span style="font-size:1.5rem;font-weight:700;color:{PAL[4]};">{attach_rate:.0f}%</span>
-                    <span style="color:{TEXT_COLOR};margin-left:0.5rem;">Add-on attach rate</span>
-                    <span style="color:#888;margin-left:0.3rem;">({total_addon_units:,.0f} add-ons / {total_combo_units:,.0f} combo units)</span>
-                </div>
-                <div style="padding:0.8rem 1.2rem;background:{'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'};
-                            border-radius:10px;border:1px solid {'#e8e8e8' if not dark else '#30363d'};">
-                    <span style="font-size:1.5rem;font-weight:700;color:{PAL[0]};">${addon_rev:,.2f}</span>
-                    <span style="color:{TEXT_COLOR};margin-left:0.5rem;">Total add-on revenue</span>
-                    <span style="color:#888;margin-left:0.3rem;">(avg ${addon_rev/total_addon_units:,.2f}/add-on)</span>
-                </div>
+            <div style="padding:1.2rem;background:{panel_bg};border-radius:12px;border:1px solid {border_c};">
+                <h4 style="color:{PAL[4]};margin-bottom:0.6rem;">Combo Insights</h4>
+                <p><b>Best combo day:</b> {best_day} (${combo_best_day.iloc[0]:,.0f})</p>
+                <p><b>Weakest combo day:</b> {worst_day} — consider a combo promo</p>
+                <p><b>Combo share:</b> {combo_units/(combo_units+non_combo_units)*100:.0f}% of all units, {combo_rev/net*100:.0f}% of revenue</p>
+                <p><b>Avg combo price:</b> ${combo_rev/combo_units:,.2f} vs regular ${non_combo_rev/non_combo_units:,.2f}</p>
             </div>
             """, unsafe_allow_html=True)
 
-        # Categorize side types for smarter analysis
-        side_cats = ["Drinks", "Sides (Hot)", "Chutney", "Dessert", "Street Food"]
-        has_cat = "menu_category" in f.columns
-
-        # Co-purchase analysis: items bought on same date+outlet as combo items
-        combo_dates = combo_df[["sales_date", "outlet"]].drop_duplicates()
-        non_combo_with_combo = non_combo_df.merge(combo_dates, on=["sales_date", "outlet"])
-        non_combo_without_combo = non_combo_df[~non_combo_df.index.isin(
-            non_combo_with_combo.index)] if len(non_combo_with_combo) < len(non_combo_df) else pd.DataFrame()
-
-        if not non_combo_with_combo.empty:
-            cd1, cd2 = st.columns(2)
-            with cd1:
-                # Top items sold alongside combos — grouped by category
-                copurch = (non_combo_with_combo.groupby(["product"] + (["menu_category"] if has_cat else [])).agg(
-                    rev=("net_sales", "sum"), units=("primary_units", "sum"),
-                    days=("sales_date", "nunique")).reset_index()
-                    .sort_values("units", ascending=False))
-                top_copurch = copurch.head(12)
-                bar_colors = []
-                cat_color_map = {
-                    "Drinks": PAL[0], "Sides (Hot)": PAL[1], "Chutney": PAL[3],
-                    "Dessert": PAL[4], "Street Food": PAL[5], "Pizza": PAL[6],
-                    "Specials Daily": PAL[7], "Togos (Chilled)": PAL[8]}
-                if has_cat:
-                    bar_colors = [cat_color_map.get(c, PAL[2]) for c in top_copurch["menu_category"]]
-                else:
-                    bar_colors = PAL[0]
-                fig_copurch = go.Figure(go.Bar(
-                    y=top_copurch["product"], x=top_copurch["units"], orientation="h",
-                    marker=dict(color=bar_colors),
-                    text=[f"{u:,.0f} units · ${v:,.0f}" for u, v in
-                          zip(top_copurch["units"], top_copurch["rev"])],
-                    textposition="outside", textfont=dict(size=10, color=TEXT_COLOR),
-                    hovertemplate="<b>%{y}</b><br>%{x:,.0f} units<extra></extra>"))
-                fig_copurch.update_layout(**CL, title="Top Add-Ons Sold With Combos",
-                                          height=max(350, len(top_copurch) * 30 + 80))
-                fig_copurch.update_xaxes(visible=False)
-                fig_copurch.update_yaxes(gridcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_copurch, width="stretch")
-
-            with cd2:
-                # Category breakdown of what sells with combos
-                if has_cat:
-                    cat_copurch = (non_combo_with_combo.groupby("menu_category").agg(
-                        rev=("net_sales", "sum"), units=("primary_units", "sum")).reset_index()
-                        .sort_values("rev", ascending=False))
-                    fig_cat_co = go.Figure(go.Pie(
-                        labels=cat_copurch["menu_category"], values=cat_copurch["units"], hole=0.5,
-                        marker=dict(colors=[cat_color_map.get(c, PAL[2]) for c in cat_copurch["menu_category"]]),
-                        textinfo="label+percent",
-                        hovertemplate="<b>%{label}</b><br>%{value:,.0f} units<br>%{percent}<extra></extra>"))
-                    fig_cat_co.update_layout(**CL, title="Add-On Categories With Combos",
-                                             height=350, showlegend=False)
-                    fig_cat_co.add_annotation(
-                        text=f"<b>{non_combo_with_combo['primary_units'].sum():,.0f}</b><br>"
-                             f"<span style='font-size:10px'>add-on units</span>",
-                        x=0.5, y=0.5, font_size=14, font_color=TEXT_COLOR, showarrow=False)
-                    st.plotly_chart(fig_cat_co, width="stretch")
-                else:
-                    # Combo item breakdown by day of week
-                    combo_dow = (combo_df.groupby(["product", "day_of_week"]).agg(
-                        units=("primary_units", "sum")).reset_index())
-                    dow_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                    combo_prods = combo_df.groupby("product")["primary_units"].sum().nlargest(6).index.tolist()
-                    fig_combo_dow = go.Figure()
-                    for i, prod in enumerate(combo_prods):
-                        pdata = combo_dow[combo_dow["product"] == prod]
-                        pdata = pdata.copy()
-                        pdata["day_of_week"] = pd.Categorical(pdata["day_of_week"],
-                                                               categories=dow_order, ordered=True)
-                        pdata = pdata.sort_values("day_of_week")
-                        fig_combo_dow.add_trace(go.Bar(
-                            x=pdata["day_of_week"], y=pdata["units"], name=prod,
-                            marker=dict(color=PAL[i % len(PAL)])))
-                    fig_combo_dow.update_layout(**CL, title="Combo Sales by Day of Week",
-                                                height=350, barmode="group",
-                                                legend=dict(orientation="h", y=-0.25, font_size=9))
-                    st.plotly_chart(fig_combo_dow, width="stretch")
-
-            # ── Combo + Drink/Side Pairing Matrix ──────────────────────────
-            st.markdown('<p class="sec-title">Combo + Side Pairing Analysis</p>',
-                        unsafe_allow_html=True)
-
-            # Build pairing matrix: for each combo product, what sides sell on the same day
-            combo_prods_list = combo_df.groupby("product")["primary_units"].sum().nlargest(5).index.tolist()
-            side_items = non_combo_with_combo.copy()
-            if has_cat:
-                side_items = side_items[side_items["menu_category"].isin(side_cats)]
-            top_sides = side_items.groupby("product")["primary_units"].sum().nlargest(10).index.tolist()
-
-            if top_sides and combo_prods_list:
-                pair_data = []
-                for cp in combo_prods_list:
-                    cp_dates = combo_df[combo_df["product"] == cp][["sales_date", "outlet"]].drop_duplicates()
-                    cp_sides = side_items.merge(cp_dates, on=["sales_date", "outlet"])
-                    for sp in top_sides:
-                        sp_units = cp_sides[cp_sides["product"] == sp]["primary_units"].sum()
-                        pair_data.append({"combo": cp, "side": sp, "units": sp_units})
-                pair_df = pd.DataFrame(pair_data)
-                pair_piv = pair_df.pivot_table(index="side", columns="combo", values="units", fill_value=0)
-                # Sort by total
-                pair_piv = pair_piv.loc[pair_piv.sum(axis=1).sort_values(ascending=True).index]
-
-                fig_pair = go.Figure(go.Heatmap(
-                    z=pair_piv.values, x=[c[:20] for c in pair_piv.columns.tolist()],
-                    y=pair_piv.index.tolist(),
-                    colorscale=[[0, "#f8f9ff" if not dark else "#0d1117"],
-                                [0.3, PAL[5] + "55"], [0.6, PAL[0]], [1, PAL[4]]],
-                    hovertemplate="<b>%{y}</b> + <b>%{x}</b><br>%{z:,.0f} units together<extra></extra>",
-                    texttemplate="%{z:,.0f}", textfont=dict(size=11)))
-                fig_pair.update_layout(**CL, title="Pairing Heatmap: Combo × Side Item (units sold together)",
-                                       height=max(300, len(top_sides) * 30 + 100))
-                st.plotly_chart(fig_pair, width="stretch")
-
-            # ── Combo day vs non-combo day lift ────────────────────────────
-            combo_day_count = combo_dates["sales_date"].nunique()
-            all_day_count = f["sales_date"].nunique()
-            non_combo_day_count = max(all_day_count - combo_day_count, 1)
-
-            lt1, lt2 = st.columns(2)
-            with lt1:
-                # Combo by day of week
-                combo_dow = (combo_df.groupby(["product", "day_of_week"]).agg(
-                    units=("primary_units", "sum")).reset_index())
-                dow_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                combo_prods_top = combo_df.groupby("product")["primary_units"].sum().nlargest(5).index.tolist()
-                fig_combo_dow = go.Figure()
-                for i, prod in enumerate(combo_prods_top):
-                    pdata = combo_dow[combo_dow["product"] == prod].copy()
-                    pdata["day_of_week"] = pd.Categorical(pdata["day_of_week"],
-                                                           categories=dow_order, ordered=True)
-                    pdata = pdata.sort_values("day_of_week")
-                    fig_combo_dow.add_trace(go.Bar(
-                        x=pdata["day_of_week"], y=pdata["units"], name=prod[:25],
-                        marker=dict(color=PAL[i % len(PAL)]),
-                        hovertemplate=f"<b>{prod[:25]}</b><br>%{{x}}: %{{y:,.0f}} units<extra></extra>"))
-                fig_combo_dow.update_layout(**CL, title="Combo Sales by Day of Week",
-                                            height=350, barmode="group",
-                                            legend=dict(orientation="h", y=-0.25, font_size=9))
-                fig_combo_dow.update_xaxes(gridcolor=GRID)
-                fig_combo_dow.update_yaxes(gridcolor=GRID)
-                st.plotly_chart(fig_combo_dow, width="stretch")
-
-            with lt2:
-                # Recommendations panel
-                combo_best_day = combo_df.groupby("day_of_week")["net_sales"].sum().sort_values(ascending=False)
-                best_day = combo_best_day.index[0] if not combo_best_day.empty else "N/A"
-                worst_day = combo_best_day.index[-1] if len(combo_best_day) > 1 else "N/A"
-                combo_pct_days = combo_day_count / all_day_count * 100
-                avg_combo_basket = (combo_rev + non_combo_with_combo["net_sales"].sum()) / combo_day_count
-
-                # Find top pairing for each combo
-                top_pairings = []
-                for cp in combo_prods_list[:3]:
-                    cp_dates = combo_df[combo_df["product"] == cp][["sales_date", "outlet"]].drop_duplicates()
-                    cp_sides = side_items.merge(cp_dates, on=["sales_date", "outlet"])
-                    if not cp_sides.empty:
-                        best_side = cp_sides.groupby("product")["primary_units"].sum().idxmax()
-                        best_units = cp_sides.groupby("product")["primary_units"].sum().max()
-                        top_pairings.append((cp, best_side, best_units))
-
-                panel_bg = 'rgba(255,255,255,0.85)' if not dark else 'rgba(30,35,50,0.9)'
-                border_c = '#e8e8e8' if not dark else '#30363d'
-                st.markdown(f"""
-                <div style="padding:1.2rem;background:{panel_bg};border-radius:12px;border:1px solid {border_c};">
-                    <h4 style="color:{PAL[4]};margin-bottom:0.6rem;">Best Combo Pairings</h4>
-                """, unsafe_allow_html=True)
-                for cp, side, u in top_pairings:
-                    st.markdown(f"<p style='margin:0.3rem 0;'><b>{cp[:30]}</b> + <b>{side}</b> "
-                                f"({u:,.0f} units together)</p>", unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <hr style="border-color:{border_c};">
-                <h4 style="color:{PAL[0]};margin-bottom:0.5rem;">Revenue Prediction</h4>
-                <p><b>Combo day avg basket:</b> ${avg_combo_basket:,.0f}/day</p>
-                <p><b>Best combo day:</b> {best_day} (${combo_best_day.iloc[0]:,.0f})</p>
-                <p><b>Weakest combo day:</b> {worst_day} — promote combos more here</p>
-                """, unsafe_allow_html=True)
-
-                if combo_pct_days < 100:
-                    avg_regular_basket = non_combo_df["net_sales"].sum() / non_combo_day_count if non_combo_day_count > 0 else 0
-                    uplift = (avg_combo_basket - avg_regular_basket) * non_combo_day_count
-                    st.markdown(f"""
-                    <p style="margin-top:0.5rem;color:{PAL[4]};font-weight:700;">
-                    If every operating day had combo availability, estimated additional revenue:
-                    ~${uplift:,.0f}</p>
-                    """, unsafe_allow_html=True)
-
-                st.markdown(f"""
-                <hr style="border-color:{border_c};">
-                <h4 style="color:{PAL[1]};margin-bottom:0.5rem;">Recommended New Combos</h4>
-                <p>Based on co-purchase patterns, consider bundling:</p>
-                """, unsafe_allow_html=True)
-
-                # Generate smart recommendations based on actual data
-                if top_pairings:
-                    drinks_sold = side_items[side_items["menu_category"] == "Drinks"]["product"].value_counts() if has_cat else pd.Series(dtype=int)
-                    sides_sold = side_items[side_items["menu_category"].isin(["Sides (Hot)", "Chutney"])]["product"].value_counts() if has_cat else pd.Series(dtype=int)
-                    top_drink = drinks_sold.index[0] if not drinks_sold.empty else "a drink"
-                    top_side = sides_sold.index[0] if not sides_sold.empty else "a side"
-
-                    for cp, best_side, _ in top_pairings[:2]:
-                        st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"{cp[:25]} + {top_drink} + {top_side}\"</b> "
-                                    f"meal deal</p>", unsafe_allow_html=True)
-                    st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"Combo {worst_day}\"</b> weekly special "
-                                f"to boost the weakest day</p>", unsafe_allow_html=True)
-                    if not drinks_sold.empty and len(drinks_sold) > 1:
-                        second_drink = drinks_sold.index[1]
-                        st.markdown(f"<p style='margin:0.3rem 0;'>• <b>\"Any BYO Bowl + {second_drink}\"</b> "
-                                    f"— {second_drink} has untapped pairing potential</p>",
-                                    unsafe_allow_html=True)
-
-                st.markdown("</div>", unsafe_allow_html=True)
+            # Combo recommendations based on available data
+            combo_day_count = combo_df["sales_date"].nunique()
+            avg_combo_basket = combo_df["net_sales"].sum() / combo_day_count if combo_day_count else 0
+            st.markdown(f"""
+            <div style="padding:1rem;margin-top:0.8rem;background:{panel_bg};border-radius:12px;border:1px solid {border_c};">
+                <h4 style="color:{PAL[0]};margin-bottom:0.5rem;">Recommendations</h4>
+                <p>• <b>Promote combos on {worst_day}</b> — weakest combo day, consider a special deal</p>
+                <p>• <b>Avg combo basket:</b> ${avg_combo_basket:,.0f}/day across {combo_day_count} days</p>
+                <p>• <b>Bundle suggestion:</b> Pair top BYO bowls with a drink for a meal deal</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: PEAK TIMES
