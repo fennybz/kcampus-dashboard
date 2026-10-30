@@ -424,6 +424,48 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
 .por-grp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: .88rem; }
 .por-grp li { display: flex; justify-content: space-between; gap: 10px; }
 .por-grp b { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Viewer mode (not logged in as admin): basic sales only */
+.viewer #tab-summary, .viewer #tab-prep, .viewer #tab-money, .viewer #tab-data, .viewer .nav-sep,
+.viewer #combos, .viewer #summary, .viewer #prep, .viewer #money, .viewer #data,
+.viewer .kc-upload-btn,
+.viewer #items-table th:nth-child(2), .viewer #items-table td:nth-child(2) { display: none !important; }
+.has-login .side-card { padding-bottom: 58px; }
+.viewer #card-items .kc-chips { display: none !important; }
+.prep-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin: 4px 0 10px; }
+.prep-filters label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; color: var(--muted); min-width: 0; }
+.prep-filters select, .prep-filters input { font: inherit; font-size: .88rem; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; max-width: 100%; }
+.prep-filters select { min-width: 11rem; }
+.prep-filters .pf-search { flex: 1 1 14rem; }
+.prep-filters input:focus-visible, .prep-filters select:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+#prep-count { align-self: center; }
+@media (max-width: 560px) { .prep-filters select { min-width: 0; width: 100%; } .prep-filters label { flex: 1 1 100%; } }
+/* Locations & categories heat table (replaces the small-multiple charts and the outlet scorecard) */
+#card-out-table, #card-out-trend, #card-cat-trend, #card-vend { display: none !important; }
+#card-season[hidden] { display: none !important; }
+.heat-ctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.heat-at { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.heat-at[hidden] { display: none; }
+.heat-at select { font: inherit; font-size: .85rem; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; max-width: 12rem; }
+.heat-wrap { overflow-x: auto; margin: 6px -4px 0; padding: 0 4px 4px; }
+table.heat { border-collapse: separate; border-spacing: 3px; width: 100%; font-size: .82rem; font-variant-numeric: tabular-nums; }
+table.heat th { font-weight: 500; color: var(--muted); font-size: .74rem; padding: 4px 6px; white-space: nowrap; text-align: center; }
+table.heat th.h-name, table.heat td.h-name { text-align: left; position: sticky; left: 0; background: var(--panel); z-index: 1; }
+table.heat td { padding: 7px 6px; white-space: nowrap; border-radius: 6px; }
+table.heat .h-num { text-align: right; }
+table.heat td.h-name { font-weight: 500; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; padding-right: 12px; }
+table.heat td.h-cell { text-align: center; min-width: 3.4rem; color: var(--fg); }
+table.heat td.h-dark { color: #fff; }
+table.heat td.h-peak { box-shadow: inset 0 0 0 2px var(--primary); font-weight: 600; }
+table.heat td.h-part, table.heat th.h-part { color: var(--muted); font-style: italic; }
+table.heat td.h-gap { color: var(--muted); background: repeating-linear-gradient(135deg, var(--panel-2) 0 4px, transparent 4px 8px); }
+table.heat tbody tr { cursor: pointer; }
+table.heat tbody tr:hover td.h-name, table.heat tbody tr:focus-visible td.h-name { color: var(--primary); }
+table.heat tbody tr:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+table.heat tfoot td { font-weight: 600; border-top: 1px solid var(--line); color: var(--fg); }
+table.heat .kc-up { color: var(--ok); } table.heat .kc-down { color: var(--bad); }
+@media (max-width: 640px) { table.heat .h-sm { display: none; } table.heat td.h-name { max-width: 8.5rem; } }
+.kc-card .kc-tablewrap { overflow-x: auto; max-width: 100%; }
+@media (min-width: 901px) { .kc-grid:has(#card-season[hidden]) #card-dow { grid-column: 1 / -1; } .kc-grid:has(#card-season[hidden]) #card-dow .kc-chart { max-width: 760px; } }
 
 </style>
 </head>
@@ -687,8 +729,9 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
   </section>
 
   <section id="outlets" class="kc-page" data-page="weekly" hidden>
-    <h2 class="sec-h">Locations</h2>
+    <h2 class="sec-h">Locations &amp; categories</h2>
     <div class="kc-grid">
+      <div class="kc-card kc-wide" id="card-heat"><div class="card-head"><h3 id="heat-title">Locations, sales week by week</h3><div class="heat-ctl"><div class="seg" role="radiogroup" aria-label="Rows" id="heat-by"><button type="button" role="radio" data-by="outlet" aria-checked="true">Locations</button><button type="button" role="radio" data-by="category" aria-checked="false">Categories</button></div><label class="heat-at" id="heat-at-wrap" hidden><span>at</span><select id="heat-at" aria-label="Location for categories"></select></label><div class="seg" role="radiogroup" aria-label="Measure" id="heat-m"><button type="button" role="radio" data-m="revenue" aria-checked="true">Sales $</button><button type="button" role="radio" data-m="units" aria-checked="false">Items</button></div></div></div><div class="heat-wrap" id="heat-wrap"></div><p class="kc-note keep" id="heat-note"></p></div>
       <div class="kc-card kc-wide" id="card-out-table">
         <h3>Outlet scorecard</h3>
         <p class="kc-note">Click a row to filter by that outlet.</p>
@@ -815,6 +858,13 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
           <button type="button" class="kc-btn" id="prep-dl">Download prep sheet (CSV)</button></div></div>
         <p class="g-text" id="prep-sum"></p>
         <p class="prep-warn" id="prep-warn" hidden></p>
+        <div class="prep-filters" role="group" aria-label="Filter the prep list">
+          <label><span>Location</span><select id="prep-loc"></select></label>
+          <label><span>Category</span><select id="prep-cat"></select></label>
+          <label class="pf-search"><span>Item</span><input id="prep-q" type="search" placeholder="Search items, e.g. lassi" autocomplete="off"></label>
+          <button type="button" class="kc-btn" id="prep-clear">Clear</button>
+          <span class="kc-note keep" id="prep-count" aria-live="polite"></span>
+        </div>
         <div class="kc-tablewrap" id="prep-wrap">
           <table class="kc-table prep-table"><thead id="prep-head"></thead><tbody id="prep-body"></tbody></table>
         </div>
@@ -2306,6 +2356,7 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
     if (active === 'items') drawCombos(rows, t);
     if (active === 'weekly') drawWeekly(rows, p, m, fmt, mName, wt);
     if (active === 'weekly') drawOutlets(rows, p, m, fmt, t);
+    if (active === 'weekly' && KC.drawHeat) KC.drawHeat(rows, p);
     if (active === 'money') drawMoney(rows, p, all);
     if (active === 'data' && KC.drawData) KC.drawData(rows, all);
     if (active === 'prep' && KC.drawPrep) KC.drawPrep(rows, p, all);
@@ -3015,7 +3066,9 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
       'Top 5 items by units sold',
       'What do people add to their bowls?',
       'Give me 3 ideas to grow sales',
-    ].filter(Boolean);
+      window.KC_ROLE === 'viewer' ? 'Which location sells the most?' : null,
+      window.KC_ROLE === 'viewer' ? 'How did sales do last week?' : null,
+    ].filter(Boolean).filter((q) => window.KC_ROLE !== 'viewer' || !/keep|drop|add to|ideas/i.test(q));
     const box = $('ai-sugg');
     qs.forEach((q) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'kc-chip'; b.textContent = q;
@@ -3121,6 +3174,7 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
     const ql = ' ' + q.toLowerCase().replace(/[’]/g, "'") + ' ';
     const blocks = [];
     const P = (...parts) => blocks.push({ p: parts });
+    if (window.KC_ROLE === 'viewer' && KC.chatGuard) { const g = KC.chatGuard(ql); if (g) return g; }
     const ent = findEntities(ql, all);
     const unitsAsked = /\bunits?\b|\bsold\b|how many|quantity|\bqty\b|popular|volume|count/.test(ql) && !/revenue|\$|money|dollar|earn/.test(ql);
     const m = unitsAsked ? 'units' : 'revenue';
@@ -3158,11 +3212,11 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
     const where = whereParts.length ? ' ' + whereParts.join(' ') : '';
     const chartFmt = m === 'units' ? 'number' : 'usd';
 
-    if (KC.prepAnswer && /\bprep\b|prepar|stock up|how (much|many)\b.*\b(make|stock|order|cook|need|prep)|\bforecast|par level|next week.*(make|need|order)/.test(ql)) return KC.prepAnswer(ql, all, ent);
+    if (KC.prepAnswer && /\bprep\b|prepar|stock up|how (much|many)\b.*\b(should|to|do) (we )?(make|stock|order|cook|need|prep|prepare)\b|\bforecast|par level|next week.*(make|need|order)/.test(ql)) return KC.prepAnswer(ql, all, ent);
     // help
     if (/what can you|help|how do i use|what should i ask/.test(ql)) {
-      P('I can answer questions about your items, locations, days, bowls and add-ons. A few things you could try:');
-      blocks.push({ list: ['How is Mango Lassi doing?', 'Which items should we drop?', 'What is our busiest day?', 'Compare JSOM and SCI', 'What do people add to their bowls?', 'Give me 3 ideas to grow sales'] });
+      P(window.KC_ROLE === 'viewer' ? 'I can answer questions about sales, revenue, items sold, locations, days and weekly trends. A few things you could try:' : 'I can answer questions about your items, locations, days, bowls and add-ons. A few things you could try:');
+      blocks.push({ list: window.KC_ROLE === 'viewer' ? ['How is Mango Lassi doing?', 'What is our busiest day?', 'Compare JSOM and SCI', 'Top 5 items by units sold', 'How did sales do last week?'] : ['How is Mango Lassi doing?', 'Which items should we drop?', 'What is our busiest day?', 'Compare JSOM and SCI', 'What do people add to their bowls?', 'Give me 3 ideas to grow sales'] });
       return blocks;
     }
     // add-ons
@@ -3267,7 +3321,7 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
       const me = Object.assign({}, meS, { net: meP.net, units: meP.units, share: meP.share, price: meP.units ? meP.net / meP.units : meS.price });
       const trend = me.mom == null ? '' : Math.abs(me.momRel) < 0.1 ? ' Lately it\'s moving in line with the rest of the menu.' : me.momRel > 0 ? ' It\'s been doing better than the rest of the menu lately (' + (me.mom >= 0 ? 'up ' : 'down only ') + KC.fmt.pct0(Math.abs(me.mom)) + ').' : ' It\'s been slipping faster than the rest of the menu lately (down ' + KC.fmt.pct0(Math.abs(me.mom)) + ').';
       P(['b', name], ' has brought in ' + KC.fmt.usd(me.net) + where + ' from ' + KC.fmt.n(me.units) + ' sold, about ' + KC.fmt.usd2(me.price) + ' each. That makes it #' + rank + ' of ' + all2.length + ' items (' + KC.fmt.pct(me.share) + ' of sales).' + trend);
-      P('My take: ' + KC.VERDICT[me.verdict].label.toLowerCase() + '. ' + me.reason.replace(/ Recent weeks.*$/, ''));
+      if (window.KC_ROLE !== 'viewer') P('My take: ' + KC.VERDICT[me.verdict].label.toLowerCase() + '. ' + me.reason.replace(/ Recent weeks.*$/, ''));
       const outs = KC.group(pr, (r) => r.outlet).sort((a, b) => b.net - a.net);
       if (outs.length > 1) P('Most of it sells at ' + outs[0].key + ' (' + KC.fmt.pct0(outs[0].net / me.net) + ')' + (outs[1] ? ', followed by ' + outs[1].key + '.' : '.'));
       const opts = d3.rollups(pr.filter((r) => r.type === 'mod' && r.choice && !/^(Included choice|Premium option|Paid extra|Standard size|Larger size)$/.test(r.choice)), (v) => d3.sum(v, (r) => r.qty), (r) => r.choice).sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -3896,44 +3950,46 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
   KC.prepBreakNote = breakNote;
 
   let lastPlan = null;
-  KC.drawPrep = function (rows, p, all) {
-    const raw = dash.params() || {};
-    const buf = raw.prepBuf == null ? 0.1 : Number(raw.prepBuf);
-    document.querySelectorAll('#prep-buf button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.b) === buf)));
-    const plan = KC.prepPlan(all || rows, { outlet: p.outlet, buffer: buf });
-    lastPlan = plan;
-    const body = $('prep-body'), sum = $('prep-sum'), por = $('prep-por');
-    body.replaceChildren(); por.replaceChildren();
-    if (!plan || !plan.rows.length) { sum.textContent = 'Load at least two full weeks of sales to get a prep plan.'; return; }
-    $('prep-title').textContent = 'Week of ' + KC.weekLabel(plan.target);
-    const note = breakNote(plan.target);
-    const acc = plan.accuracy;
-    const parts = [];
-    parts.push(`Expect about ${KC.fmt.n(Math.round(plan.total))} items across ${plan.rows.length} menu lines${p.outlet ? ' at ' + p.outlet : ''}. Prep numbers include a ${Math.round(buf * 100)}% safety buffer.`);
-    parts.push(`Based on the ${plan.ref.length} full weeks up to ${KC.fmt.dateShort(addDays(plan.lastKey, 6))}.`);
-    if (acc) parts.push(`Tested on past weeks, this method was within about ${Math.round(acc.totalErr * 100)}% on total items and ${Math.round(acc.itemErr * 100)}% item by item.`);
-    sum.textContent = parts.join(' ');
-    const warn = $('prep-warn');
-    const w = [];
-    if (note) w.push(note);
-    if (plan.behind) w.push('The newest loaded week ends ' + KC.fmt.dateLong(addDays(plan.lastKey, 6)) + '. Upload the missing weeks so this plan uses current sales.');
-    warn.textContent = w.join(' '); warn.hidden = !w.length;
-    // table head with day dates
-    const head = $('prep-head');
-    head.replaceChildren();
+  const F = { cat: '', q: '' };
+  const filtered = (plan) => plan.rows.filter((d) => (!F.cat || d.category === F.cat) && (!F.q || d.product.toLowerCase().includes(F.q)));
+
+  function fillFilters(plan, all, p) {
+    const loc = $('prep-loc'), cat = $('prep-cat');
+    if (!loc || !cat) return;
+    const outs = [...new Set((all || []).map((r) => r.outlet))].sort();
+    if (loc.dataset.opts !== outs.join('|')) { loc.replaceChildren(new Option('All locations', ''), ...outs.map((o) => new Option(o, o))); loc.dataset.opts = outs.join('|'); }
+    loc.value = p.outlet || '';
+    const cats = [...new Set(plan.rows.map((d) => d.category).filter(Boolean))].sort();
+    if (F.cat && !cats.includes(F.cat)) F.cat = '';
+    cat.replaceChildren(new Option('All categories', ''), ...cats.map((c) => new Option(c, c)));
+    cat.value = F.cat;
+    $('prep-q').value = F.q;
+  }
+
+  function renderTable() {
+    const plan = lastPlan; if (!plan) return;
+    const body = $('prep-body'), head = $('prep-head');
+    body.replaceChildren(); head.replaceChildren();
     const tr = document.createElement('tr');
     const th = (t, cls, title) => { const e = document.createElement('th'); e.textContent = t; if (cls) e.className = cls; if (title) e.title = title; tr.appendChild(e); };
     th('Item'); th('Last 4 weeks', 'kc-num kc-hide-sm', 'Items sold each week, newest first'); th('Expected', 'kc-num', 'Weighted average of the last 4 full weeks'); th('Prep', 'kc-num prep-col', 'Expected plus the safety buffer, rounded up');
     DAYS.forEach((d, i) => { if (plan.openDays[i]) th(d + ' ' + d3.utcFormat('%-m/%-d')(new Date(addDays(plan.target, i) + 'T00:00:00Z')), 'kc-num kc-hide-sm'); });
     head.appendChild(tr);
     const ncol = tr.children.length;
+    const list = filtered(plan);
+    const cnt = $('prep-count');
+    if (cnt) cnt.textContent = (F.cat || F.q) ? 'Showing ' + list.length + ' of ' + plan.rows.length + ' lines · ' + KC.fmt.n(d3.sum(list, (d) => d.prep)) + ' to prep' : '';
+    if (!list.length) {
+      const r = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = ncol; td.className = 'muted'; td.style.padding = '16px 8px';
+      td.textContent = 'No items match. Clear the search or pick another category.'; r.appendChild(td); body.appendChild(r); return;
+    }
     let cur = null;
-    plan.rows.forEach((d) => {
+    list.forEach((d) => {
       if (d.outlet !== cur) {
         cur = d.outlet;
         const g = document.createElement('tr'); g.className = 'prep-grp';
         const td = document.createElement('td'); td.colSpan = ncol;
-        const sub = plan.rows.filter((x) => x.outlet === cur);
+        const sub = list.filter((x) => x.outlet === cur);
         td.textContent = cur + ' · ' + KC.fmt.n(d3.sum(sub, (x) => x.prep)) + ' to prep';
         g.appendChild(td); body.appendChild(g);
       }
@@ -3947,6 +4003,32 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
       d.daily.forEach((v, i) => { if (plan.openDays[i]) td(v ? String(v) : '–', 'kc-num kc-hide-sm' + (v ? '' : ' muted')); });
       body.appendChild(r);
     });
+  }
+
+  KC.drawPrep = function (rows, p, all) {
+    const raw = dash.params() || {};
+    const buf = raw.prepBuf == null ? 0.1 : Number(raw.prepBuf);
+    document.querySelectorAll('#prep-buf button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.b) === buf)));
+    const plan = KC.prepPlan(all || rows, { outlet: p.outlet, buffer: buf });
+    lastPlan = plan;
+    const body = $('prep-body'), sum = $('prep-sum'), por = $('prep-por');
+    body.replaceChildren(); por.replaceChildren();
+    if (!plan || !plan.rows.length) { $('prep-head').replaceChildren(); sum.textContent = 'Load at least two full weeks of sales to get a prep plan.'; return; }
+    $('prep-title').textContent = 'Week of ' + KC.weekLabel(plan.target);
+    const note = breakNote(plan.target);
+    const acc = plan.accuracy;
+    const parts = [];
+    parts.push(`Expect about ${KC.fmt.n(Math.round(plan.total))} items across ${plan.rows.length} menu lines${p.outlet ? ' at ' + p.outlet : ''}. Prep numbers include a ${Math.round(buf * 100)}% safety buffer.`);
+    parts.push(`Based on the ${plan.ref.length} full weeks up to ${KC.fmt.dateShort(addDays(plan.lastKey, 6))}.`);
+    if (acc) parts.push(`Tested on past weeks, this method was within about ${Math.round(acc.totalErr * 100)}% on total items and ${Math.round(acc.itemErr * 100)}% item by item.`);
+    sum.textContent = parts.join(' ');
+    const warn = $('prep-warn');
+    const w = [];
+    if (note) w.push(note);
+    if (plan.behind) w.push('The newest loaded week ends ' + KC.fmt.dateLong(addDays(plan.lastKey, 6)) + '. Upload the missing weeks so this plan uses current sales.');
+    warn.textContent = w.join(' '); warn.hidden = !w.length;
+    fillFilters(plan, all || rows, p);
+    renderTable();
     // portions
     if (!plan.portions.length) { const li = document.createElement('p'); li.className = 'kc-note keep'; li.textContent = 'No curry or base choices recorded in the loaded weeks.'; por.appendChild(li); }
     else {
@@ -3964,14 +4046,18 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
   function wire() {
     if (wire.done || !$('prep-dl')) return; wire.done = true;
     document.querySelectorAll('#prep-buf button').forEach((b) => b.addEventListener('click', () => dash.setParams({ prepBuf: Number(b.dataset.b) })));
+    $('prep-loc').addEventListener('change', (e) => dash.setParams({ outlet: e.target.value || null }));
+    $('prep-cat').addEventListener('change', (e) => { F.cat = e.target.value; renderTable(); });
+    let t; $('prep-q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { F.q = e.target.value.trim().toLowerCase(); renderTable(); }, 120); });
+    $('prep-clear').addEventListener('click', () => { F.cat = ''; F.q = ''; $('prep-cat').value = ''; $('prep-q').value = ''; if (dash.params().outlet) dash.setParams({ outlet: null }); else renderTable(); });
     $('prep-dl').addEventListener('click', () => {
       const plan = lastPlan; if (!plan) return;
       const days = DAYS.map((d, i) => [d, i]).filter(([, i]) => plan.openDays[i]);
       const head = ['Location', 'Category', 'Item', 'Expected', 'Prep (+' + Math.round(plan.buffer * 100) + '%)', 'Low', 'High'].concat(days.map(([d, i]) => d + ' ' + addDays(plan.target, i)));
-      const body = plan.rows.map((d) => [d.outlet, d.category, d.product, Math.round(d.exp), d.prep, d.lo, d.hi].concat(days.map(([, i]) => d.daily[i])));
+      const body = filtered(plan).map((d) => [d.outlet, d.category, d.product, Math.round(d.exp), d.prep, d.lo, d.hi].concat(days.map(([, i]) => d.daily[i])));
       const por = plan.portions.map((d) => ['Portions', d.group, d.choice, Math.round(d.exp), d.prep, '', ''].concat(days.map(() => '')));
       const csv = [head].concat(body, por).map((r) => r.map((v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
-      if (KC.saveFile) KC.saveFile('kalachandjis-prep-plan-' + plan.target + '.csv', csv);
+      if (KC.saveFile) KC.saveFile('kalachandjis-prep-plan-' + plan.target + (F.cat ? '-' + F.cat.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.csv', csv);
     });
   }
   dash.onData(wire);
@@ -4016,6 +4102,126 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
       return base + '\n\nNEXT WEEK PREP PLAN for week of ' + plan.target + ' (expected = weighted avg of last 4 full weeks; prep = +10% buffer) CSV:\noutlet,item,expected,prep,last4_newest_first\n' + lines.join('\n');
     } catch (e) { return base; }
   };
+})();
+
+</script>
+<script>
+// One heat table instead of many small charts: rows = locations or categories, columns = weeks.
+// Each cell shows that week's number; the shade compares the week with the same row's other weeks,
+// so a small location's good and bad weeks stand out as clearly as the main counter's.
+(function () {
+  const KC = window.KC;
+  const $ = (id) => document.getElementById(id);
+  const iso = d3.utcFormat('%Y-%m-%d');
+  const addDays = (k, n) => iso(d3.utcDay.offset(new Date(k + 'T00:00:00Z'), n));
+  const S = { by: 'outlet', at: '' };
+  const signed = (v) => (v >= 0 ? '+' : '−') + KC.fmt.pct0(Math.abs(v));
+
+  function compact(v, units) {
+    if (units) return v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
+    return v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v);
+  }
+
+  KC.drawHeat = function (rows, p) {
+    const box = $('heat-wrap'); if (!box) return;
+    const raw = dash.params() || {};
+    const units = raw.metric === 'units';
+    document.querySelectorAll('#heat-by button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.by === S.by)));
+    document.querySelectorAll('#heat-m button').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.m === 'units') === units)));
+    // date-filtered rows, all locations (the table itself is the location breakdown)
+    const base = KC.filter(KC.rows() || [], { ...KC.params(), outlet: null, category: null, product: null });
+    const outlets = [...new Set(base.map((r) => r.outlet))].sort();
+    const atSel = $('heat-at');
+    if (atSel.dataset.opts !== outlets.join('|')) { atSel.replaceChildren(new Option('All locations', ''), ...outlets.map((o) => new Option(o, o))); atSel.dataset.opts = outlets.join('|'); }
+    atSel.value = S.at; $('heat-at-wrap').hidden = S.by !== 'category';
+    const src = S.by === 'category' && S.at ? base.filter((r) => r.outlet === S.at) : base;
+    if (!src.length) { box.replaceChildren(); $('heat-note').textContent = 'No sales for this selection.'; return; }
+
+    const cmpB = !units && KC.cmpMode(base) === 'base';
+    const val = (r) => (units ? (r.type === 'item' ? r.units : 0) : r.net);
+    const cmp = (r) => (units ? (r.type === 'item' ? r.units : 0) : (!cmpB || r.type === 'item' ? r.net : 0));
+    const key = S.by === 'outlet' ? (r) => r.outlet : (r) => r.category;
+    // every week from first to last, so a missing week shows as a gap
+    const wkAll = [...new Set(base.map((r) => KC.weekOf(r.date)))].sort();
+    const weeks = []; for (let w = wkAll[0]; w <= wkAll[wkAll.length - 1]; w = addDays(w, 7)) weeks.push(w);
+    const have = new Set(wkAll);
+    const full = new Set(KC.fullWeeks(base));
+    const noOpts = new Set(KC.optGaps(base));
+    const groups = d3.rollups(src, (v) => ({
+      total: d3.sum(v, val),
+      wk: d3.rollup(v, (x) => d3.sum(x, cmp), (r) => KC.weekOf(r.date)),
+      best: (d3.greatest(d3.rollups(v.filter((r) => r.type === 'item'), (x) => d3.sum(x, (r) => r.net), (r) => r.product), (d) => d[1]) || [''])[0],
+    }), key).sort((a, b) => b[1].total - a[1].total).filter((d) => d[1].total > 0);
+    const grand = d3.sum(groups, (d) => d[1].total) || 1;
+    const fw = weeks.filter((w) => full.has(w));
+    const k = fw.length >= 6 ? 3 : fw.length >= 4 ? 2 : 0;
+
+    const tbl = document.createElement('table'); tbl.className = 'heat';
+    const thead = tbl.createTHead().insertRow();
+    const th = (t, cls, title) => { const e = document.createElement('th'); e.textContent = t; if (cls) e.className = cls; if (title) e.title = title; thead.appendChild(e); return e; };
+    th(S.by === 'outlet' ? 'Location' : 'Category', 'h-name');
+    th('Total', 'h-num', units ? 'Items sold in the selected dates' : 'Revenue in the selected dates, including add-ons');
+    th('Share', 'h-num h-sm');
+    weeks.forEach((w) => {
+      const e = th(KC.fmt.dateShort(w) + (noOpts.has(w) && cmpB ? '*' : ''), 'h-wk' + (full.has(w) ? '' : ' h-part'), 'Week of ' + KC.weekLabel(w) + (!have.has(w) ? ' · no file loaded' : !full.has(w) ? ' · part week' : ''));
+      e.dataset.week = w;
+    });
+    th('Recent', 'h-num', k ? 'Last ' + k + ' full weeks vs the ' + k + ' before' : 'Needs 4+ full weeks');
+    const tb = tbl.createTBody();
+    groups.forEach(([name, g]) => {
+      const tr = tb.insertRow(); tr.tabIndex = 0;
+      tr.title = S.by === 'outlet' ? (g.best ? 'Best seller: ' + g.best + '. Click to filter the dashboard to ' + name + '.' : name) : 'Click to filter the dashboard to ' + name + '.';
+      const go = () => (S.by === 'outlet' ? KC.toggle('outlet', name) : dash.setParams({ category: KC.params().category === name ? null : name, product: null }));
+      tr.addEventListener('click', go); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      const td = (t, cls) => { const c = tr.insertCell(); c.textContent = t; if (cls) c.className = cls; return c; };
+      td(name, 'h-name');
+      td(units ? KC.fmt.n(g.total) : KC.fmt.usd(g.total), 'h-num');
+      td(g.total / grand < 0.005 ? '<1%' : KC.fmt.pct0(g.total / grand), 'h-num h-sm');
+      const vals = fw.map((w) => g.wk.get(w) || 0);
+      const lo = d3.min(vals) || 0, hi = d3.max(vals) || 0;
+      weeks.forEach((w) => {
+        const c = tr.insertCell(); c.className = 'h-cell';
+        if (!have.has(w)) { c.textContent = '–'; c.classList.add('h-gap'); c.title = 'No file loaded for ' + KC.weekLabel(w); return; }
+        const v = g.wk.get(w) || 0;
+        c.textContent = v ? compact(v, units) : '·';
+        c.title = name + ', week of ' + KC.weekLabel(w) + ': ' + (units ? KC.fmt.n(v) + ' items' : KC.fmt.usd(v)) + (full.has(w) ? '' : ' (part week)');
+        if (!full.has(w)) { c.classList.add('h-part'); return; }
+        const t = hi > lo ? (v - lo) / (hi - lo) : 0.5;
+        const pct = Math.round(6 + 64 * t);
+        c.style.background = 'color-mix(in srgb, var(--primary) ' + pct + '%, transparent)';
+        if (pct >= 46) c.classList.add('h-dark');
+        if (v === hi && hi > lo) c.classList.add('h-peak');
+      });
+      let mom = null;
+      if (k) { const r = d3.mean(fw.slice(-k), (w) => g.wk.get(w) || 0), q = d3.mean(fw.slice(-2 * k, -k), (w) => g.wk.get(w) || 0); mom = q ? (r - q) / q : null; }
+      const m = td(mom == null ? '' : signed(mom), 'h-num ' + (mom == null ? '' : mom >= 0.05 ? 'kc-up' : mom <= -0.05 ? 'kc-down' : ''));
+      if (mom != null && g.total / grand < 0.02) m.title = 'Small numbers, so the % can swing a lot';
+    });
+    // total row
+    const tf = tbl.createTFoot().insertRow();
+    const tdf = (t, cls) => { const c = tf.insertCell(); c.textContent = t; if (cls) c.className = cls; return c; };
+    tdf('All', 'h-name'); tdf(units ? KC.fmt.n(grand) : KC.fmt.usd(grand), 'h-num'); tdf('100%', 'h-num h-sm');
+    weeks.forEach((w) => { const v = d3.sum(groups, (d) => d[1].wk.get(w) || 0); tdf(have.has(w) ? compact(v, units) : '–', 'h-cell' + (full.has(w) ? '' : ' h-part')); });
+    tdf('');
+    box.replaceChildren(tbl);
+    const seasons = new Set((KC.rows() || []).map((r) => KC.semester(r.date)));
+    const sc = $('card-season'); if (sc) sc.hidden = seasons.size < 2;
+    const notes = [];
+    notes.push('Darker = a stronger week for that ' + (S.by === 'outlet' ? 'location' : 'category') + '. The darkest cell in each row is its best week, outlined.');
+    if (cmpB) notes.push('* Weekly cells use item prices so every week compares fairly: some weeks are missing add-on revenue. The Total column includes add-ons.');
+    if (weeks.some((w) => !have.has(w))) notes.push('“–” means no file is loaded for that week.');
+    $('heat-note').textContent = notes.join(' ');
+    $('heat-title').textContent = (S.by === 'outlet' ? 'Locations' : 'Categories' + (S.at ? ' at ' + S.at : '')) + ', ' + (units ? 'items sold' : 'sales') + ' week by week';
+  };
+
+  function wire() {
+    if (wire.done || !$('heat-by')) return; wire.done = true;
+    const redraw = () => KC.drawHeat(null, KC.params());
+    document.querySelectorAll('#heat-by button').forEach((b) => b.addEventListener('click', () => { S.by = b.dataset.by; redraw(); }));
+    document.querySelectorAll('#heat-m button').forEach((b) => b.addEventListener('click', () => dash.setParams({ metric: b.dataset.m })));
+    $('heat-at').addEventListener('change', (e) => { S.at = e.target.value; redraw(); });
+  }
+  dash.onData(wire);
 })();
 
 </script>
@@ -4134,6 +4340,50 @@ li[data-tone="bad"] .ins-tag { background: color-mix(in srgb, var(--bad) 14%, tr
       card.appendChild(ul); box.appendChild(card);
     });
   };
+})();
+
+</script>
+<script>
+// Viewer mode: when the host says this visitor is not an admin (window.KC_ROLE = 'viewer'),
+// show only Overview, Sales trends and Menu (items). The host also strips add-on names,
+// discounts and money detail from the data before it reaches the page, so hiding here is
+// for a clean layout, not the only protection.
+(function () {
+  const KC = window.KC;
+  if (window.KC_ROLE) document.documentElement.classList.add('has-login'); // leave room for the host's login button
+  if (window.KC_ROLE !== 'viewer') return;
+  document.documentElement.classList.add('viewer');
+  const ADMIN_TABS = ['summary', 'prep', 'money', 'data'];
+  const safe = () => {
+    const sel = document.querySelector('.kc-tab[aria-selected="true"]');
+    const cur = sel ? sel.dataset.tab : (location.hash || '').slice(1);
+    if (ADMIN_TABS.includes(cur) && KC.showTab) KC.showTab('home', true);
+  };
+  const retitle = () => {
+    const h = document.querySelector('#card-items h3');
+    if (h && /verdict/i.test(h.textContent)) h.textContent = 'Every item';
+    const side = document.querySelector('.side-card b');
+    if (side) side.textContent = 'Sales report';
+  };
+  const nav = document.querySelector('#tab-items span');
+  if (nav) nav.textContent = 'Menu';
+  const title = document.getElementById('page-title');
+  if (title) new MutationObserver(() => { if (title.textContent === 'Menu & add-ons') title.textContent = 'Menu'; }).observe(title, { childList: true, characterData: true, subtree: true });
+  // Ask AI for visitors: answer from the sales they can see, decline admin-only topics.
+  const ADMIN_Q = /add-?ons?|\bextras?\b|upsell|attach|combo|curr(y|ies)|\bbases?\b|\brice\b|\bnaan\b|upgrade|premium|topping|\bprep\b|prepar|stock|forecast|par level|how (much|many)\b.*\b(should|to) (we )?(make|order|cook|prepare)\b|\badd(ed|s|ing)? (to|on)\b|what .*\badd\b|\bdrop\b|\bkeep\b|\bcut\b|remove|verdict|promote|protect|pric(e|ing) (test|increase|rise|change)|raise .*price|profit|margin|\bcosts?\b|food cost|discount|\bfees?\b|\btax\b|accountant|\bcpa\b|statement|ideas?\b|grow (our |the )?sales|improve|recommend|strategy|insight|upload/;
+  KC.chatGuard = function (ql) {
+    if (!ADMIN_Q.test(ql)) return null;
+    return [
+      { p: ['That one is only available to admins: add-ons, prep amounts, money, and keep / drop advice need an admin login.'] },
+      { p: ['I can help with sales, revenue, items sold, locations, busiest days and weekly trends. For example:'] },
+      { list: ['What were our top 5 items last week?', 'What is our busiest day?', 'How is Mango Lassi doing?', 'Compare JSOM and SCI'] },
+    ];
+  };
+  const inp = document.getElementById('ai-input');
+  if (inp) inp.placeholder = 'Ask anything, like: what sold most last week?';
+  safe(); retitle();
+  dash.onData(() => { safe(); retitle(); });
+  window.addEventListener('hashchange', safe);
 })();
 
 </script>

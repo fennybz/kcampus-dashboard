@@ -48,6 +48,7 @@ If you already ran `supabase_setup.sql` for the GitHub Pages version, skip this 
    ```toml
    SUPABASE_URL = "https://YOUR-PROJECT.supabase.co"
    SUPABASE_ANON_KEY = "YOUR-ANON-OR-PUBLISHABLE-KEY"
+   ADMIN_PASSWORD = "a long passphrase only admins know"
    ```
 
 4. Click **Deploy**. The first start takes 1–2 minutes.
@@ -60,9 +61,28 @@ If you forget the secrets, the app still opens, with a blue note saying uploads 
 - No yellow or red note at the top. If there is one, it says what to fix (setup SQL not run, wrong URL, or a secret key).
 - Click **Add weekly file**, pick the university's weekly report and enter your PIN. Refresh: the week is still there, and anyone else who opens the link sees it too.
 
+## Who sees what
+
+| | Visitors (no login) | Admins (password) |
+| --- | --- | --- |
+| Overview, Sales trends | Yes | Yes |
+| Menu: items, sales, revenue | Yes | Yes |
+| Add-ons & combos, curry / base picks | No | Yes |
+| Verdicts (keep / promote / drop) | No | Yes |
+| Prep plan, Insights, Money, Data & uploads | No | Yes |
+| Ask AI chat | Basic sales questions only | Everything |
+| Add or remove weekly files | No | Yes (plus the upload PIN) |
+
+- Visitors' data is cut down on the server before it reaches their browser: add-on names and choices, discounts and money detail are removed. Option revenue is kept, unnamed, inside each item's total, so revenue matches what admins see.
+- To log in, click **Admin login** at the bottom-left and enter `ADMIN_PASSWORD`. The login lasts 12 hours, including page refreshes. **Log out** is in the same place.
+- After logging in, the address bar contains a sign-in code (`?s=...`). Don't share that link: anyone who opens it within 12 hours is logged in as admin. Share the plain app address instead.
+- Without `ADMIN_PASSWORD` in Secrets, everyone gets the visitor view and admin login is turned off.
+- Uploaded weeks reach visitors within about 5 minutes.
+- To change the admin password, edit `ADMIN_PASSWORD` in Secrets. Everyone who's logged in gets logged out.
+
 ## Weekly routine
 
-1. Open the app and click **Add weekly file**.
+1. Open the app, log in as admin, and click **Add weekly file**.
 2. Pick the university's weekly report (CSV or Excel). Enter the PIN the first time in each browser tab.
 3. Everything updates: Overview, alerts, Prep plan, Insights, Money.
 
@@ -75,7 +95,7 @@ When the dashboard gets new features, only `dashboard_v2/dashboard.html` changes
 ## Good to know
 
 - **Who can see it:** a public Streamlit app can be opened by anyone with the link. To restrict it, open **App > Settings > Sharing** and invite specific viewers by email.
-- **Ask AI** uses the dashboard's built-in analyst here. It answers the common questions (sales, items, days, prep, add-ons), but it isn't Claude itself. Connecting Claude would need an Anthropic API key and a little server code. Ask if you want it.
+- **Ask AI** uses the dashboard's built-in analyst here. Visitors can ask about sales, items sold, locations, days and trends. It declines questions about add-ons, prep, money or keep / drop advice. Admins can ask about everything. It isn't Claude itself. Connecting Claude would need an Anthropic API key and a little server code. Ask if you want it.
 - **Changing the PIN:** run this in the Supabase SQL Editor:
 
   ```sql
