@@ -466,6 +466,21 @@ table.heat .kc-up { color: var(--ok); } table.heat .kc-down { color: var(--bad);
 @media (max-width: 640px) { table.heat .h-sm { display: none; } table.heat td.h-name { max-width: 8.5rem; } }
 .kc-card .kc-tablewrap { overflow-x: auto; max-width: 100%; }
 @media (min-width: 901px) { .kc-grid:has(#card-season[hidden]) #card-dow { grid-column: 1 / -1; } .kc-grid:has(#card-season[hidden]) #card-dow .kc-chart { max-width: 760px; } }
+/* All sales lines */
+.raw-ctl { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: flex-end; margin: 6px 0 8px; }
+.raw-ctl label { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; color: var(--muted); min-width: 0; }
+.raw-ctl select, .raw-ctl input { font: inherit; font-size: .88rem; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-width: 0; max-width: 100%; }
+.raw-ctl .pf-search { flex: 1 1 16rem; }
+.raw-sum { margin: 0 0 6px; font-size: .84rem; color: var(--fg); font-variant-numeric: tabular-nums; }
+.raw-wrap { max-height: 560px; overflow: auto !important; }
+.raw-table td { font-size: .8rem; }
+.raw-table tbody tr { cursor: default; }
+.raw-table tr.raw-opt td { color: var(--muted); }
+.raw-table tr.raw-opt td:nth-child(6) { color: var(--fg); }
+.raw-table td.raw-alias { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+.raw-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.raw-pager button:disabled { opacity: .4; cursor: default; }
+@media (max-width: 560px) { .raw-ctl label { flex: 1 1 100%; } }
 
 </style>
 </head>
@@ -900,6 +915,7 @@ table.heat .kc-up { color: var(--ok); } table.heat .kc-down { color: var(--bad);
           </table>
         </div>
       </div>
+      <div class="kc-card kc-wide" id="card-raw"><div class="card-head"><h3>All sales lines</h3><button type="button" class="kc-btn" id="raw-dl">Download these lines (CSV)</button></div><p class="kc-note keep" id="raw-scope"></p><div class="raw-ctl"><label class="pf-search"><span>Search</span><input id="raw-q" type="search" placeholder="Item, category, location, option or date" autocomplete="off"></label><label><span>Show</span><select id="raw-type"><option value="">Items and options</option><option value="item">Items only</option><option value="mod">Options only (sizes, curries, extras)</option></select></label></div><p class="raw-sum" id="raw-sum"></p><div class="kc-tablewrap raw-wrap"><table class="kc-table raw-table" id="raw-table"><thead></thead><tbody></tbody></table></div><div class="raw-pager"><button type="button" class="kc-btn" id="raw-prev">‹ Previous</button><span class="kc-note keep" id="raw-page"></span><button type="button" class="kc-btn" id="raw-next">Next ›</button></div></div>
       <div class="kc-card" id="card-uploads">
         <h3>Uploaded files</h3>
         <p class="kc-note keep" id="uploads-note"></p>
@@ -2360,6 +2376,7 @@ table.heat .kc-up { color: var(--ok); } table.heat .kc-down { color: var(--bad);
     if (active === 'money') drawMoney(rows, p, all);
     if (active === 'data' && KC.drawData) KC.drawData(rows, all);
     if (active === 'prep' && KC.drawPrep) KC.drawPrep(rows, p, all);
+    if (active === 'data' && KC.drawRaw) KC.drawRaw(rows);
   }
   KC.render = render;
 
@@ -4220,6 +4237,115 @@ table.heat .kc-up { color: var(--ok); } table.heat .kc-down { color: var(--bad);
     document.querySelectorAll('#heat-by button').forEach((b) => b.addEventListener('click', () => { S.by = b.dataset.by; redraw(); }));
     document.querySelectorAll('#heat-m button').forEach((b) => b.addEventListener('click', () => dash.setParams({ metric: b.dataset.m })));
     $('heat-at').addEventListener('change', (e) => { S.at = e.target.value; redraw(); });
+  }
+  dash.onData(wire);
+})();
+
+</script>
+<script>
+// Raw data: every sales line behind the dashboard, as a searchable, sortable table.
+// Follows the period / location / category filters at the top of the page.
+(function () {
+  const KC = window.KC;
+  const $ = (id) => document.getElementById(id);
+  const PAGE = 50;
+  const S = { q: '', type: '', sort: 'date', dir: -1, page: 0 };
+  const COLS = [
+    { k: 'date', t: 'Date' },
+    { k: 'day', t: 'Day', sm: true },
+    { k: 'outlet', t: 'Location' },
+    { k: 'category', t: 'Category', sm: true },
+    { k: 'product', t: 'Item' },
+    { k: 'opt', t: 'Option' },
+    { k: 'qty', t: 'Qty', num: true },
+    { k: 'price', t: 'Price', num: true, sm: true, money: true },
+    { k: 'gross', t: 'Gross', num: true, sm: true, money: true },
+    { k: 'discount', t: 'Discount', num: true, sm: true, money: true },
+    { k: 'net', t: 'Net', num: true, money: true },
+    { k: 'src', t: 'Source', sm: true },
+  ];
+  const SRC = { raw: 'University file', export: 'Old app export', upload: 'Uploaded' };
+  const optOf = (r) => (r.type === 'mod' ? [r.group, r.choice].filter(Boolean).join(': ') || 'Option' : '');
+  let cur = [];
+
+  function filtered(rows) {
+    const q = S.q;
+    let list = rows;
+    if (S.type) list = list.filter((r) => (S.type === 'item' ? r.type === 'item' : r.type === 'mod'));
+    if (q) list = list.filter((r) => (r.product + ' ' + (r.rawProduct || '') + ' ' + r.category + ' ' + r.outlet + ' ' + optOf(r) + ' ' + r.date).toLowerCase().includes(q));
+    const k = S.sort, d = S.dir;
+    const v = (r) => (k === 'opt' ? optOf(r) : k === 'qty' ? (r.type === 'item' ? r.units : r.qty) : r[k]);
+    return list.slice().sort((a, b) => {
+      const x = v(a), y = v(b);
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x || '').localeCompare(String(y || ''));
+      return c * d || (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+    });
+  }
+
+  KC.drawRaw = function (rows) {
+    const tbl = $('raw-table'); if (!tbl) return;
+    cur = filtered(rows || []);
+    const pages = Math.max(1, Math.ceil(cur.length / PAGE));
+    if (S.page >= pages) S.page = pages - 1;
+    const from = S.page * PAGE, slice = cur.slice(from, from + PAGE);
+    // header
+    const hr = document.createElement('tr');
+    COLS.forEach((c) => {
+      const th = document.createElement('th'); th.className = (c.num ? 'kc-num' : '') + (c.sm ? ' kc-hide-sm' : '');
+      th.setAttribute('aria-sort', S.sort === c.k ? (S.dir > 0 ? 'ascending' : 'descending') : 'none');
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = c.t + (S.sort === c.k ? (S.dir > 0 ? ' ↑' : ' ↓') : '');
+      b.addEventListener('click', () => { if (S.sort === c.k) S.dir = -S.dir; else { S.sort = c.k; S.dir = c.num || c.k === 'date' ? -1 : 1; } S.page = 0; KC.drawRaw(rows); });
+      th.appendChild(b); hr.appendChild(th);
+    });
+    tbl.tHead.replaceChildren(hr);
+    // body
+    const tb = tbl.tBodies[0]; tb.replaceChildren();
+    if (!slice.length) {
+      const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = COLS.length; td.className = 'muted'; td.style.padding = '16px 8px';
+      td.textContent = 'No sales lines match. Clear the search or change the filters at the top.';
+    }
+    slice.forEach((r) => {
+      const tr = tb.insertRow(); if (r.type === 'mod') tr.className = 'raw-opt';
+      COLS.forEach((c) => {
+        const td = tr.insertCell(); td.className = (c.num ? 'kc-num' : '') + (c.sm ? ' kc-hide-sm' : '');
+        let v;
+        if (c.k === 'day') v = (r.day || '').slice(0, 3);
+        else if (c.k === 'opt') v = optOf(r);
+        else if (c.k === 'qty') v = KC.fmt.n(r.type === 'item' ? r.units : r.qty);
+        else if (c.k === 'src') v = SRC[r.src] || r.src || '';
+        else if (c.money) v = r[c.k] ? KC.fmt.usd2(r[c.k]) : (c.k === 'discount' ? '' : '$0.00');
+        else v = r[c.k] == null ? '' : r[c.k];
+        td.textContent = v;
+        if (c.k === 'product' && r.rawProduct && r.rawProduct !== r.product) { td.title = 'In the file as: ' + r.rawProduct; td.classList.add('raw-alias'); }
+        if (c.k === 'src' && r.file) td.title = r.file;
+      });
+    });
+    // totals for everything that matches (not just this page)
+    const items = cur.filter((r) => r.type === 'item');
+    const sum = (f) => d3.sum(cur, f);
+    $('raw-sum').textContent = KC.fmt.n(cur.length) + ' lines · ' + KC.fmt.n(d3.sum(items, (r) => r.units)) + ' items sold · gross ' + KC.fmt.usd(sum((r) => r.gross)) + ' · discounts ' + KC.fmt.usd(sum((r) => r.discount)) + ' · net ' + KC.fmt.usd(sum((r) => r.net));
+    $('raw-page').textContent = cur.length ? 'Showing ' + KC.fmt.n(from + 1) + '–' + KC.fmt.n(Math.min(from + PAGE, cur.length)) + ' of ' + KC.fmt.n(cur.length) : '';
+    $('raw-prev').disabled = S.page <= 0; $('raw-next').disabled = S.page >= pages - 1;
+    $('raw-type').value = S.type;
+    const p = KC.params();
+    const scope = [p.start || p.end ? 'the selected dates' : 'all dates', p.outlet || 'all locations'].concat(p.category ? [p.category] : []).concat(p.product ? [p.product] : []);
+    $('raw-scope').textContent = 'Showing ' + scope.join(', ') + '. Change the filters at the top of the page to narrow it.';
+  };
+
+  function current() { return KC.filter(KC.rows() || [], KC.params()); }
+  function wire() {
+    if (wire.done || !$('raw-table')) return; wire.done = true;
+    let t;
+    $('raw-q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value.trim().toLowerCase(); S.page = 0; KC.drawRaw(current()); }, 150); });
+    $('raw-type').addEventListener('change', (e) => { S.type = e.target.value; S.page = 0; KC.drawRaw(current()); });
+    $('raw-prev').addEventListener('click', () => { S.page = Math.max(0, S.page - 1); KC.drawRaw(current()); });
+    $('raw-next').addEventListener('click', () => { S.page += 1; KC.drawRaw(current()); });
+    $('raw-dl').addEventListener('click', () => {
+      const head = ['Date', 'Day', 'Location', 'Channel', 'Category', 'Item', 'Item as in file', 'Line type', 'Option group', 'Option', 'Quantity', 'Items sold', 'Unit price', 'Gross', 'Discount', 'Net', 'Source', 'File'];
+      const body = cur.map((r) => [r.date, r.day, r.outlet, r.channel, r.category, r.product, r.rawProduct || r.product, r.type === 'item' ? 'Item' : 'Option', r.group, r.choice, r.qty, r.type === 'item' ? r.units : 0, r.price, r.gross, r.discount, r.net, SRC[r.src] || r.src, r.file || '']);
+      const csv = [head].concat(body).map((row) => row.map((v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
+      if (KC.saveFile) KC.saveFile('kalachandjis-sales-lines-' + new Date().toISOString().slice(0, 10) + '.csv', csv);
+    });
   }
   dash.onData(wire);
 })();

@@ -69,7 +69,7 @@ If you forget the secrets, the app still opens, with a blue note saying uploads 
 | Menu: items, sales, revenue | Yes | Yes |
 | Add-ons & combos, curry / base picks | No | Yes |
 | Verdicts (keep / promote / drop) | No | Yes |
-| Prep plan, Insights, Money, Data & uploads | No | Yes |
+| Prep plan, Insights, Money, Data & uploads (incl. all sales lines) | No | Yes |
 | Ask AI chat | Basic sales questions only | Everything |
 | Add or remove weekly files | No | Yes (plus the upload PIN) |
 
