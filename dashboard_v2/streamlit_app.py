@@ -124,9 +124,20 @@ is_admin = bool(st.session_state.admin) and bool(ADMIN_PASSWORD)
 
 
 # ---------------------------------------------------------------- data for visitors
-@st.cache_data(show_spinner=False)
-def page_html():
+def page_version():
+    """Changes whenever dashboard.html is replaced (e.g. after a git push), so caches refresh."""
+    p = HERE / "dashboard.html"
+    s = p.stat()
+    return "%d-%d" % (s.st_mtime_ns, s.st_size)
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def _page_html(version):
     return (HERE / "dashboard.html").read_text(encoding="utf-8")
+
+
+def page_html():
+    return _page_html(page_version())
 
 
 def split_page(html):
@@ -205,9 +216,9 @@ def strip_for_viewer(rows):
     return sorted(out, key=lambda r: r["date"])
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def viewer_html(url, key):
-    head, data, tail = split_page(page_html())
+@st.cache_data(ttl=300, show_spinner=False, max_entries=4)
+def viewer_html(url, key, version):
+    head, data, tail = split_page(_page_html(version))
     rows = decode(data)
     note = ""
     if url and key:
@@ -293,5 +304,5 @@ if is_admin:
         inject += "<script>window.KC_SUPABASE = %s;</script>\n" % json.dumps(cfg)
     html = html.replace(MARKER, inject + MARKER, 1)
 else:
-    html, _note = viewer_html(url, key)
+    html, _note = viewer_html(url, key, page_version())
 components.html(html, height=900, scrolling=True)
